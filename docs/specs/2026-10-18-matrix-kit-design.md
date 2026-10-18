@@ -67,7 +67,9 @@ matrix-kit/
 
 The engine loads exactly one hooks module. `register.tsx` imports `construct.tsx` and `operator.tsx`, which export `registerConstruct(on, options)` and `registerOperator(on, options)`. Relative runtime imports are allowed; every imported file must end in `.ts` or `.tsx`, and `import()` is not allowed. All state lives in atoms under plugin `matrix-kit`, so the panel reads the metrics that `operator.tsx` collects. Both parts draw `AbovePrompt` and chain with `next(e)`, so the progress bar sits above the metrics strip.
 
-**To verify first (plan task 1):** whether the import specifier needs the extension (`'./lib/theme.ts'`) or not. The plan writes extensions explicitly.
+**Verified in task 1 (validator, 2.1.302):** specifiers with the extension (`'./lib/shared.ts'`) load. Two more rules apply:
+- **One registration per event.** The plugin may register each event only once without a matcher. The events both halves need (`session.start`, `turn.step`, `turn.complete`, `ui.render` AbovePrompt) are exported from each half as `async function` declarations (`constructSessionStart`, `operatorSessionStart`, …) and registered once in `register.tsx`, which passes construct's hook a `next` that runs operator's.
+- **`$` across files.** The validator follows `$` across an import only into a function declaration, so any helper that takes `$` is written `function name($) {…}`, never `const name = ($) => …`.
 
 ## 5. Parts
 
