@@ -6,8 +6,6 @@ const BAND = { component: 'AbovePrompt', props: { hasSurvey: false, isWorking: f
 
 async function session($: Engine, on: On) {
   mock.clock(on, { now: Date.parse('2026-10-10T02:00:00Z') })
-  mock.env(on, { LANG: 'en_US.UTF-8' })
-  on('settings.read', async () => ({ value: {} }) as never)
   on('session.start', async () => ({ cwd: '/repo' }) as never)
   await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
   await $.tool.call({ tool: 'mcp__matrix-kit__progress', title: 'Ship it', total: 4, done: 1, phase: 'delegate' } as never)
