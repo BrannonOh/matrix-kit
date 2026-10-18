@@ -12,7 +12,7 @@ async function session($: Engine, on: On, mocks: (on: On) => void = () => {}) {
   mocks(on)
   on('session.start', async () => ({ cwd: '/repo' }) as never)
   on('session.usage', () => ({ value: { startedAt: 1_000, context: { window: 1_000_000 }, rateLimits: [], cost: { usd: 0.5 } } }) as never)
-  on('turn.start', () => ({}) as never)
+  on('turn.start', () => ({ turnId: 'turn' }) as never)
   on('turn.complete', () => ({ text: '' }) as never)
   await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
 }

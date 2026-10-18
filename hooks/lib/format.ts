@@ -42,3 +42,11 @@ export const fmtTime = (ms: number): string => {
 // "850 ms", "1.4 s", then clock time from a minute up.
 export const fmtDuration = (ms: number): string =>
   ms < 1000 ? `${Math.round(ms)} ms` : ms < 60_000 ? `${(ms / 1000).toFixed(1)} s` : fmtTime(ms)
+
+// "Opus 5.5" from "claude-opus-5-5"; the id itself when it names no known family.
+export const modelName = (id: string): string => {
+  const m = /(fable|mythos|opus|sonnet|haiku)-(\d+)(?:-(\d{1,2})(?!\d))?/i.exec(id)
+  const [, family = '', major = '', minor] = m ?? []
+  if (!family) return id.replace(/^claude-/, '').replace(/\[.*\]$/, '') || '—'
+  return `${family.charAt(0).toUpperCase()}${family.slice(1).toLowerCase()} ${major}${minor ? '.' + minor : ''}`
+}

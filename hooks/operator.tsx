@@ -3,9 +3,13 @@ import type { EngineInterface, On } from 'claude-code'
 import type { HookArgs, Options } from './lib/shared.ts'
 
 import type { Cache } from '../types/index.d.ts'
-import { addSplit, emptyMetrics, mergeContext, splitOf } from './lib/metrics.ts'
+import { fmtTokens, modelName } from './lib/format.ts'
+import { addSplit, emptyMetrics, mergeContext, roomLeft, splitOf } from './lib/metrics.ts'
 import type { Metrics } from './lib/metrics.ts'
 import { cacheSavingsOf } from './lib/prices.ts'
+import { stripItems } from './lib/strip.ts'
+import type { StripItem } from './lib/strip.ts'
+import { PALETTE } from './lib/theme.ts'
 
 // Responses shorter than this are mostly tool-call stubs: their timing is noise.
 const MIN_TOKENS = 20
@@ -19,13 +23,11 @@ const CACHE_ALERT_S = 10 * 60
 // Minutes left at which the cache expiry is announced, once each per answer.
 const CACHE_NOTIFY_MINUTES = [10, 5] as const
 
-const SPEED = '#8b8cf8'
-const MONEY = '#4caf6e'
-const MUTED = '#8a8f8c'
-const CONTEXT = '#5fa8d3'
-const CACHE = '#4fb3a9'
-const WARN = '#e2a94e'
-const ALERT = '#e0846b'
+const SPEED = PALETTE.green
+const MONEY = PALETTE.done
+const MUTED = '#5A7A62'
+const CONTEXT = PALETTE.green2
+const CACHE = PALETTE.green2
 
 // Everything the strip and The Construct show about the session.
 export const metrics = atom({ plugin: 'matrix-kit', key: 'metrics' } as const, emptyMetrics() as Metrics)
@@ -86,7 +88,7 @@ const cacheIcon = (color: string) =>
 const pad = (n: number) => String(n).padStart(2, '0')
 
 const contextBar = (percent: number) => {
-  const color = percent >= 85 ? '#e0846b' : percent >= 65 ? '#e2a94e' : MONEY
+  const color = percent >= 85 ? PALETTE.alert : percent >= 65 ? PALETTE.warn : MONEY
   const w = Math.round((Math.min(100, percent) / 100) * 80)
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 6" width="80" height="6">
     <rect width="80" height="6" rx="3" fill="${MUTED}" fill-opacity="0.3"/>
@@ -95,17 +97,7 @@ const contextBar = (percent: number) => {
 
 const usd = (n: number) => `$${n.toFixed(2)}`
 
-// Density by the band's width in cells, so the row shrinks instead of wrapping:
-// 0 full; 1 no context bar; 2 compact turn/speed; 3 turn cost only, smaller icons;
-// 4 no speed. Thresholds are minimum bodyColumns for each tier.
-const TIER_MIN = [78, 64, 52, 40] as const
-const GAPS = [3, 2, 2, 1, 1] as const
-const tierFor = (columns: number) => {
-  const i = TIER_MIN.findIndex(min => columns >= min)
-  return i === -1 ? TIER_MIN.length : i
-}
-
-// Last measured width, for `/operator width` while tuning TIER_MIN; debug only.
+// Last measured width, for `/operator width` while tuning lib/strip.ts; debug only.
 let lastColumns: number | null = null
 
 async function refresh($: EngineInterface) {
@@ -120,7 +112,7 @@ async function refresh($: EngineInterface) {
 // it is skipped while the person is at this session, and then a toast says it instead.
 async function notifyCacheExpiry($: EngineInterface, minutes: number) {
   const project = (await $.session.cwd()).split(/[\\/]/).filter(Boolean).pop() ?? 'session'
-  const message = `Prompt cache expires in ${minutes} min`
+  const message = `Wake up — prompt cache expires in ${minutes} min`
 
   const text = `${project}: ${message}`
   const sent = await $.tool
@@ -156,7 +148,7 @@ export const registerOperator = (on: On): void => {
 
     if (e.args.trim() === 'width') {
       const columns = lastColumns
-      return { text: columns === null ? 'Band not drawn yet.' : `Band: ${columns} columns, tier ${tierFor(columns)}.` }
+      return { text: columns === null ? 'Strip not drawn yet.' : `Strip: ${columns} columns: ${stripItems(columns, true).join(', ')}.` }
     }
 
     const hidden = !(await read($, isHidden))
@@ -296,27 +288,26 @@ export async function operatorTurnComplete($: HookArgs<'turn.complete'>[0], e: H
   return result
 }
 
+// Plan-limit windows by the short names the strip uses.
+const LIMIT_NAME: Record<string, string> = { five_hour: '5h', seven_day: '7d', spend_limit: 'spend' }
+
 export async function operatorAbovePrompt($: HookArgs<'ui.render'>[0], e: HookArgs<'ui.render'>[1], next: HookArgs<'ui.render'>[2]) {
   const m = await read($, metrics)
-  const s = { turn: m.turn, speed: m.speed, turnCost: m.turnCostUsd, total: m.costUsd, context: m.context.percent ?? 0 }
-  if (e.props.hasSurvey || s.turn === 0 || (await read($, isHidden))) return next(e)
+  if (e.props.hasSurvey || m.turn === 0 || (await read($, isHidden))) return next(e)
 
   const ui = $.ui.resolve(e)
   const { Box, Button, Text } = ui
-  const Svg = 'Svg' in ui ? ui.Svg : null
-  const speed = s.speed === null ? '—' : `${s.speed} tok/s`
-  const turnCost = s.turnCost === null ? '—' : usd(s.turnCost)
+  const Svg = e.surface !== 'terminal' && 'Svg' in ui ? ui.Svg : null
 
   const { secondsLeft } = await read($, cache)
   const level =
     e.props.isWorking || secondsLeft === null
       ? null
       : secondsLeft <= CACHE_ALERT_S
-        ? ALERT
+        ? PALETTE.alert
         : secondsLeft <= CACHE_WARN_S
-          ? WARN
+          ? PALETTE.warn
           : null
-  const cacheColor = level ?? CACHE
   const cacheText =
     e.props.isWorking ? '…'
     : secondsLeft === null ? '—'
@@ -324,49 +315,51 @@ export async function operatorAbovePrompt($: HookArgs<'ui.render'>[0], e: HookAr
     : `${pad(Math.floor(secondsLeft / 60))}:${pad(secondsLeft % 60)}`
 
   lastColumns = e.props.bodyColumns
-  const tier = tierFor(e.props.bodyColumns)
-  const icon = tier >= 3 ? 18 : 22
+  const items = stripItems(e.props.bodyColumns, m.rateLimits.length > 0)
+  const percent = m.context.percent ?? 0
+  const limits = m.rateLimits.map(r => `${LIMIT_NAME[r.kind] ?? r.kind} ${Math.round(r.percentUsed)}%`).join(' · ')
+  const worst = Math.round(Math.max(0, ...m.rateLimits.map(r => r.percentUsed)))
+  const room = roomLeft(m.context)
+  const ICON = 18
+
+  // One strip item: an icon on the desktop or a glyph in the terminal, then its value.
+  const item = (key: string, icon: string | null, glyph: string, color: string, text: string, textColor?: string) => (
+    <Box key={key} flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
+      {Svg && icon ? <Svg source={icon} alt={key} width={ICON} height={ICON} /> : <Text color={color}>{glyph}</Text>}
+      <Text bold color={textColor}>{text}</Text>
+    </Box>
+  )
+  const drawn: Record<StripItem, () => unknown> = {
+    speed: () => item('speed', SPEED_ICON, '»', SPEED, `${m.speed ?? '—'} tok/s`),
+    turnCost: () => item('turnCost', MONEY_ICON, '$', MONEY, m.turnCostUsd === null ? '—' : usd(m.turnCostUsd), MONEY),
+    sessionCost: () => <Text key="sessionCost" bold>{`| ${usd(m.costUsd)}`}</Text>,
+    cache: () => item('cache', cacheIcon(level ?? CACHE), '⧗', level ?? CACHE, cacheText, level ?? undefined),
+    context: () => (
+      <Box key="context" flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
+        {Svg ? <Svg source={contextIcon(percent)} alt="context" width={ICON} height={ICON} /> : <Text color={CONTEXT}>◔</Text>}
+        {Svg && items.includes('room') ? <Svg source={contextBar(percent)} alt={`context ${percent}%`} width={80} height={6} /> : null}
+        <Text bold>{`${percent}%`}</Text>
+      </Box>
+    ),
+    limits: () => item('limits', null, '▤', MUTED, limits),
+    limitsCombined: () => item('limitsCombined', null, '▤', MUTED, `limit ${worst}%`),
+    model: () => item('model', null, '◆', SPEED, m.model ? `${modelName(m.model)}${m.effort ? ` · ${m.effort}` : ''}` : '—'),
+    room: () => (room === null ? null : item('room', null, '↧', MUTED, `${fmtTokens(room)} left`)),
+  }
 
   return (
     <Box
+      key="operator"
       flexDirection="row"
       alignItems="center"
-      columnGap={GAPS[tier]}
+      columnGap={2}
       flexWrap="nowrap"
       overflow="hidden"
       paddingX={1}
       {...(level ? { borderStyle: 'round', borderColor: level } : {})}
     >
-      {tier <= 2 ? (
-        <Box flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
-          {tier <= 1 ? <Text dimColor>Turn</Text> : <Text dimColor>#</Text>}
-          <Text bold>{String(s.turn)}</Text>
-        </Box>
-      ) : null}
-      {tier <= 3 ? (
-        <Box flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
-          {Svg ? <Svg source={SPEED_ICON} alt="speed" width={icon} height={icon} /> : <Text color={SPEED}>⚡</Text>}
-          <Text bold wrap="truncate-end">{tier <= 1 || s.speed === null ? speed : `${s.speed}/s`}</Text>
-        </Box>
-      ) : null}
-      <Box flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
-        {Svg ? <Svg source={MONEY_ICON} alt="cost" width={icon} height={icon} /> : <Text color={MONEY}>$</Text>}
-        <Text bold color={MONEY}>{turnCost}</Text>
-        {tier <= 2 ? <Text dimColor>|</Text> : null}
-        {tier <= 2 ? <Text bold>{usd(s.total)}</Text> : null}
-      </Box>
-      <Box flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
-        {Svg ? <Svg source={cacheIcon(cacheColor)} alt="cache" width={icon} height={icon} /> : <Text color={cacheColor}>⧗</Text>}
-        <Text bold color={level ?? undefined}>{cacheText}</Text>
-      </Box>
+      {items.map(k => drawn[k]())}
       <Box flexGrow={1} flexShrink={1} />
-      <Box flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
-        {Svg ? <Svg source={contextIcon(s.context)} alt="context" width={icon} height={icon} /> : null}
-        {Svg && tier === 0 ? (
-          <Svg source={contextBar(s.context)} alt={`context ${s.context}%`} width={80} height={6} />
-        ) : null}
-        <Text bold>{`${s.context}%`}</Text>
-      </Box>
       <Button key="hide" label="×" role="dismiss" plain dimColor onPress={() => update($, isHidden, () => true)} />
     </Box>
   )

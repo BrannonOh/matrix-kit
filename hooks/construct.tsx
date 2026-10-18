@@ -3,7 +3,7 @@ import type { EngineInterface, On } from 'claude-code'
 import type { HookArgs, Options } from './lib/shared.ts'
 
 import type { AgentRun, Flow, Panel, Phase, PlannedTask } from '../types/index.d.ts'
-import { clip, fitText, fmtCost, fmtTime, fmtTokens, textWidth, xml } from './lib/format.ts'
+import { clip, fitText, fmtCost, fmtTime, fmtTokens, modelName, textWidth, xml } from './lib/format.ts'
 import { costOf, windowOf } from './lib/prices.ts'
 import { MONO_FONT, PALETTE, glyphAt, noise, themeCss } from './lib/theme.ts'
 import { CHARACTER_COLOR, SPRITE_CSS, badgeOf, spriteSvg } from './lib/sprites.ts'
@@ -233,12 +233,6 @@ const tierModel = (tier: string): string => {
 // "Opus 5.5 · low" for a run, or just the model when no effort was seen.
 const runModel = (a: AgentRun): string => (a.effort ? `${modelName(a.model)} · ${effortWord(a.effort)}` : modelName(a.model))
 
-const modelName = (id: string): string => {
-  const m = /(fable|mythos|opus|sonnet|haiku)-(\d+)(?:-(\d{1,2})(?!\d))?/i.exec(id)
-  const [, family = '', major = '', minor] = m ?? []
-  if (!family) return id.replace(/^claude-/, '').replace(/\[.*\]$/, '') || '—'
-  return `${family.charAt(0).toUpperCase()}${family.slice(1).toLowerCase()} ${major}${minor ? '.' + minor : ''}`
-}
 
 const norm = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 
