@@ -2,7 +2,10 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On } from 'claude-code'
 import type { HookArgs, Options } from './lib/shared.ts'
 
-import type { Cache, Stats } from '../types/index.d.ts'
+import type { Cache } from '../types/index.d.ts'
+import { addSplit, emptyMetrics, mergeContext, splitOf } from './lib/metrics.ts'
+import type { Metrics } from './lib/metrics.ts'
+import { cacheSavingsOf } from './lib/prices.ts'
 
 // Responses shorter than this are mostly tool-call stubs: their timing is noise.
 const MIN_TOKENS = 20
@@ -24,14 +27,8 @@ const CACHE = '#4fb3a9'
 const WARN = '#e2a94e'
 const ALERT = '#e0846b'
 
-const stats = atom({ plugin: 'matrix-kit', key: 'stats' } as const, {
-  turn: 0,
-  speed: null,
-  turnCost: null,
-  total: 0,
-  context: 0,
-  costAtStart: 0,
-} as Stats)
+// Everything the strip and The Construct show about the session.
+export const metrics = atom({ plugin: 'matrix-kit', key: 'metrics' } as const, emptyMetrics() as Metrics)
 
 const cache = atom({ plugin: 'matrix-kit', key: 'cache' } as const, {
   expiresAt: null,
@@ -108,18 +105,15 @@ const tierFor = (columns: number) => {
   return i === -1 ? TIER_MIN.length : i
 }
 
-// Last measured width, for `/session_data width` while tuning TIER_MIN; debug only.
+// Last measured width, for `/operator width` while tuning TIER_MIN; debug only.
 let lastColumns: number | null = null
 
 async function refresh($: EngineInterface) {
-  const { cost, context } = await $.session.usage()
-  const total = cost?.usd ?? 0
-  await update($, stats, s => ({
-    ...s,
-    total,
-    turnCost: total - s.costAtStart,
-    context: context.percent ?? s.context,
-  }))
+  const { cost, context, startedAt } = await $.session.usage()
+  await update($, metrics, m => {
+    const costUsd = cost?.usd ?? m.costUsd
+    return { ...m, costUsd, turnCostUsd: costUsd - m.costAtStart, context: mergeContext(m.context, context), startedAt }
+  })
 }
 
 // Claude Code's own notification, which also reaches the phone over Remote Control;
@@ -143,8 +137,11 @@ async function notifyCacheExpiry($: EngineInterface, minutes: number) {
 
 export const registerOperator = (on: On): void => {
 
-  on('command.run', { command: 'session_data' }, async ($, e) => {
-    // `/session_data demo <minutes>` fakes the cache deadline to preview the warnings;
+  on('command.run', { command: 'operator' }, async ($, e) => {
+    // `/operator json` prints what has been collected, for tests and debugging.
+    if (e.args.trim() === 'json') return { text: JSON.stringify(await read($, metrics)) }
+
+    // `/operator demo <minutes>` fakes the cache deadline to preview the warnings;
     // the next answer resets it.
     const demo = e.args.trim().match(/^demo\s+(\d+(?:\.\d+)?)$/)
     if (demo) {
@@ -165,14 +162,44 @@ export const registerOperator = (on: On): void => {
     const hidden = !(await read($, isHidden))
     await update($, isHidden, () => hidden)
 
-    return { text: hidden ? 'Session band hidden.' : 'Session band shown.' }
+    return { text: hidden ? 'Operator strip hidden.' : 'Operator strip shown.' }
   })
 
   on('turn.start', async ($, e, next) => {
     const total = (await $.session.usage()).cost?.usd ?? 0
-    await update($, stats, s => ({ ...s, turn: s.turn + 1, costAtStart: total, total }))
+    await update($, metrics, m => ({ ...m, turn: m.turn + 1, costAtStart: total, costUsd: total, tools: { ...m.tools, turn: 0, turnErrors: 0 } }))
     await update($, isBusy, () => true)
 
+    return next(e)
+  })
+
+  // Every tool call of the session, workers' included; an Agent call also brings its lines changed.
+  on('tool.call', async ($, e, next) => {
+    const result = await next(e)
+    const isError = result.isError === true
+    const lines = e.tool === 'Agent' ? (result.result as { toolStats?: { linesAdded?: number; linesRemoved?: number } } | undefined)?.toolStats : undefined
+    await update($, metrics, m => ({
+      ...m,
+      tools: {
+        turn: m.tools.turn + 1,
+        session: m.tools.session + 1,
+        turnErrors: m.tools.turnErrors + (isError ? 1 : 0),
+        sessionErrors: m.tools.sessionErrors + (isError ? 1 : 0),
+      },
+      linesAdded: m.linesAdded + (lines?.linesAdded ?? 0),
+      linesRemoved: m.linesRemoved + (lines?.linesRemoved ?? 0),
+    }))
+    return result
+  })
+
+  // Context, plan limits and cost as the engine measures them, after each main turn and as limits move.
+  on('session.measure', async ($, e, next) => {
+    await update($, metrics, m => ({
+      ...m,
+      context: mergeContext(m.context, e.context),
+      rateLimits: e.rateLimits.map(r => ({ kind: r.kind, percentUsed: r.percentUsed, resetsAt: r.resetsAt })),
+      costUsd: e.cost?.usd ?? m.costUsd,
+    }))
     return next(e)
   })
 
@@ -182,8 +209,8 @@ export async function operatorSessionStart($: HookArgs<'session.start'>[0], e: H
   const result = await next(e)
 
   await $.command.register({
-    name: 'session_data',
-    description: 'Show or hide the session band; `demo <minutes>` previews the cache warning',
+    name: 'operator',
+    description: 'Show or hide the operator metrics strip; `demo <minutes>` previews the cache warning',
   })
 
   $.clock.every(1000, async () => {
@@ -209,50 +236,69 @@ export async function operatorSessionStart($: HookArgs<'session.start'>[0], e: H
   return result
 }
 
+// Each model request: the main thread's model, effort, time to first token and speed;
+// every request's cache savings. The stream's own result is passed on unchanged.
 export async function* operatorTurnStep($: HookArgs<'turn.step'>[0], e: HookArgs<'turn.step'>[1], next: HookArgs<'turn.step'>[2]) {
-  if (e.agentId !== undefined) return yield* next(e)
+  const isMain = e.agentId === undefined
+  const hookAt = await $.clock.now()
+  if (isMain) await update($, metrics, m => ({ ...m, model: e.model || m.model, effort: e.effort === undefined ? m.effort : String(e.effort) }))
 
-  // Measured from the response's first item (its envelope, message_start), so
-  // time-to-first-token is excluded but thinking that streams hidden or in one
-  // late burst is still timed: output_tokens counts it.
+  // Speed is timed from the response's first item (its envelope, message_start), so
+  // time to first token is left out but thinking that streams hidden or in one late
+  // burst is still timed: output_tokens counts it.
   let startedAt: number | null = null
-
-  for await (const chunk of next(e)) {
-    if (startedAt === null) {
-      startedAt = await $.clock.now()
+  let isAnswering = false
+  const stream = next(e)
+  for (let item = await stream.next(); ; item = await stream.next()) {
+    if (item.done) {
+      const usage = item.value?.usage
+      if (usage) {
+        const saved = cacheSavingsOf(usage.model || e.model, usage)
+        await update($, metrics, m => ({ ...m, cacheSavingsUsd: m.cacheSavingsUsd + saved }))
+      }
+      if (isMain) await refresh($)
+      return item.value
     }
-
-    if (chunk.kind === 'stop' && chunk.usage !== null) {
-      const tokens = chunk.usage.output_tokens
-      const seconds = ((await $.clock.now()) - startedAt) / 1000
-      const speed = tokens / seconds
-      if (tokens >= MIN_TOKENS && seconds >= MIN_SECONDS && speed <= MAX_SPEED) {
-        await update($, stats, s => ({ ...s, speed: Math.round(speed) }))
+    const chunk = item.value
+    if (isMain) {
+      const at = await $.clock.now()
+      if (startedAt === null) startedAt = at
+      if (!isAnswering && e.index === 0 && (chunk.kind === 'text' || chunk.kind === 'thinking' || chunk.kind === 'tool')) {
+        isAnswering = true
+        await update($, metrics, m => ({ ...m, ttftMs: at - hookAt }))
+      }
+      if (chunk.kind === 'stop' && chunk.usage !== null) {
+        const tokens = chunk.usage.output_tokens
+        const seconds = (at - startedAt) / 1000
+        const speed = tokens / seconds
+        if (tokens >= MIN_TOKENS && seconds >= MIN_SECONDS && speed <= MAX_SPEED) {
+          await update($, metrics, m => ({ ...m, speed: Math.round(speed) }))
+        }
       }
     }
-
     yield chunk
   }
-
-  await refresh($)
 }
 
 export async function operatorTurnComplete($: HookArgs<'turn.complete'>[0], e: HookArgs<'turn.complete'>[1], next: HookArgs<'turn.complete'>[2]) {
   const result = await next(e)
-  await refresh($)
 
   if (e.agentId === undefined) {
+    const turn = splitOf(e.usage)
+    await update($, metrics, m => ({ ...m, turnMs: e.durationMs ?? m.turnMs, lastTurn: turn ?? m.lastTurn, session: addSplit(m.session, turn) }))
     const now = await $.clock.now()
     await update($, cache, () => ({ expiresAt: now + CACHE_TTL_MS, secondsLeft: CACHE_TTL_MS / 1000 }))
     await update($, isBusy, () => false)
     await update($, warned, () => 0)
   }
+  await refresh($)
 
   return result
 }
 
 export async function operatorAbovePrompt($: HookArgs<'ui.render'>[0], e: HookArgs<'ui.render'>[1], next: HookArgs<'ui.render'>[2]) {
-  const s = await read($, stats)
+  const m = await read($, metrics)
+  const s = { turn: m.turn, speed: m.speed, turnCost: m.turnCostUsd, total: m.costUsd, context: m.context.percent ?? 0 }
   if (e.props.hasSurvey || s.turn === 0 || (await read($, isHidden))) return next(e)
 
   const ui = $.ui.resolve(e)

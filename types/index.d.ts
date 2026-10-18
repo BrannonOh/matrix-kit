@@ -46,18 +46,34 @@ export type Panel = {
   autoOpenedFor: string
 }
 
-export type Stats = {
-  turn: number
-  speed: number | null
-  turnCost: number | null
-  total: number
-  context: number
-  costAtStart: number
-}
-
 export type Cache = {
   expiresAt: number | null
   secondsLeft: number | null
+}
+
+export type TokenSplit = { input: number; output: number; cacheRead: number; cacheWrite: number }
+
+export type RateLimit = { kind: string; percentUsed: number; resetsAt: number }
+
+export type Metrics = {
+  turn: number
+  model: string | null
+  effort: string | null
+  speed: number | null
+  ttftMs: number | null
+  turnMs: number | null
+  costUsd: number
+  turnCostUsd: number | null
+  costAtStart: number
+  lastTurn: TokenSplit | null
+  session: TokenSplit
+  cacheSavingsUsd: number
+  tools: { turn: number; session: number; turnErrors: number; sessionErrors: number }
+  linesAdded: number
+  linesRemoved: number
+  rateLimits: RateLimit[]
+  context: { tokens: number | null; window: number | null; percent: number | null }
+  startedAt: number | null
 }
 
 declare module 'claude-code' {
@@ -67,7 +83,7 @@ declare module 'claude-code' {
       agents: AgentRun[]
       panel: Panel
       now: number
-      stats: Stats
+      metrics: Metrics
       cache: Cache
       isHidden: boolean
       isBusy: boolean
