@@ -172,6 +172,7 @@ All characters are chibi humans on a 24 × 30 pixel grid, drawn as inline SVG re
   - If they do, use CSS keyframes, with `@media (prefers-reduced-motion: reduce) { animation: none }`.
   - If they don't, use SMIL with `isInteractive: true`. Each sprite then carries a still frame and an animated group, and `@media (prefers-reduced-motion: reduce)` hides the animated group and shows the still one.
   - The choice lives in one place: `lib/sprites.ts` exports `MOTION: 'css' | 'smil'`.
+  - **Checked on screen 2026-10-18 (Brannon, desktop app):** the original crabs walk, so CSS keyframes play without `isInteractive`. `MOTION` is `'css'`.
 - **Size budget:** one `Svg` source must stay under 131,072 characters; a sprite is about 4 KB, so a row is far under. Long lists are still split one `Svg` per row, as in the original.
 - **Terminal:** each character is a coloured letter badge (`N`, `M`, `T`, `K`, `m`, `O`, `S`) in green tones; the status glyphs are kept.
 
