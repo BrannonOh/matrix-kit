@@ -24,9 +24,13 @@ export const noise = (x: number, y: number): number => {
 
 export const glyphAt = (col: number, row: number): string => GLYPHS.charAt(Math.floor(noise(col, row) * GLYPHS.length))
 
-// Classes every drawing uses: .t text, .m muted text, .k track, .tk ticks, .acc accent, .dn done.
+// Classes every drawing uses: .t text, .m muted text, .k track, .tk ticks, .acc accent, .dn done, .pt text on an accent.
 // Dark is the Matrix itself; in light mode the greens darken and nothing is filled black.
 export const themeCss = (): string => `<style>
-.t{fill:#C8FFD4}.m{fill:#3F9A58}.k{fill:${PALETTE.surface}}.tk{fill:${PALETTE.faint}}.acc{fill:${PALETTE.green}}.dn{fill:${PALETTE.done}}
-@media (prefers-color-scheme: light){.t{fill:#1F2A22}.m{fill:#5A7A62}.k{fill:#E6ECE7}.tk{fill:#B9C9BD}.acc{fill:${PALETTE.lightGreen}}.dn{fill:${PALETTE.lightGreen}}}
+.t{fill:#C8FFD4}.m{fill:#3F9A58}.k{fill:${PALETTE.surface}}.tk{fill:${PALETTE.faint}}.acc{fill:${PALETTE.green}}.dn{fill:${PALETTE.done}}.pt{fill:${PALETTE.surface}}
+@media (prefers-color-scheme: light){.t{fill:#1F2A22}.m{fill:#5A7A62}.k{fill:#E6ECE7}.tk{fill:#B9C9BD}.acc{fill:${PALETTE.lightGreen}}.dn{fill:${PALETTE.lightGreen}}.pt{fill:#FFFFFF}}
 </style>`
+
+// For drawings that colour with attributes (the strip's icons): light mode darkens the greens.
+const GREENS = [PALETTE.green, PALETTE.done, PALETTE.green2]
+export const LIGHT_ACCENTS_CSS = `<style>@media (prefers-color-scheme: light){${GREENS.map(g => `[stroke="${g}"]`).join(',')}{stroke:${PALETTE.lightGreen}}${GREENS.map(g => `[fill="${g}"]`).join(',')}{fill:${PALETTE.lightGreen}}}</style>`

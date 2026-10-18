@@ -64,3 +64,24 @@ test('a main request records model, effort, time to first token and cache saving
   // 2M cache reads on Opus 5.5 save 2 × (4 − 0.20) = $7.60.
   expect(Math.abs(m.cacheSavingsUsd - 7.6)).toBeLessThan(1e-9)
 })
+
+// Review fix: subagents raise turn.start too; only the main loop's starts a prompt.
+test("a worker's turn.start neither counts as a prompt nor resets the prompt's cost", async ($, on) => {
+  await session($, on)
+  await ($.turn.start as (e: unknown) => Promise<unknown>)({ turnId: 'main', text: 'hi' })
+  const before = await metrics($)
+  await ($.turn.start as (e: unknown) => Promise<unknown>)({ turnId: 'worker', text: 'brief', agentId: 'a1' })
+  const after = await metrics($)
+  expect(after.turn).toBe(1)
+  expect(after.costAtStart).toBe(before.costAtStart)
+})
+
+// Review fix: the engine sends resetsAt as an ISO string, and may leave it out.
+test('a plan limit keeps its reset time as given, null when absent', async ($, on) => {
+  await session($, on, o => o('session.measure', (_$, e) => ({ changed: e.changed }) as never))
+  await $.session.measure({ context: { window: 1_000_000 }, rateLimits: [{ kind: 'five_hour', percentUsed: 42, resetsAt: '2026-10-18T05:00:00Z' }, { kind: 'seven_day', percentUsed: 9 }], changed: ['rateLimits'] } as never)
+  expect((await metrics($)).rateLimits).toEqual([
+    { kind: 'five_hour', percentUsed: 42, resetsAt: '2026-10-18T05:00:00Z' },
+    { kind: 'seven_day', percentUsed: 9, resetsAt: null },
+  ])
+})

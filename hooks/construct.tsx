@@ -161,7 +161,6 @@ const rowSvg = (f: Flow, W: number, isWorking: boolean): string => {
   const BAR_X = Math.round(16 + textWidth(title, 13) + 12)
   const BAR_W = Math.max(60, W - BAR_X - 46 - RUNNER_W)
   const tone = f.isFinished ? 'dn' : 'acc'
-  const color = f.isFinished ? PALETTE.done : PALETTE.green
   const y0 = (H - BAR_H) / 2
   const fillW = Math.round(BAR_W * ratio(f))
   const runW = f.total ? Math.round((BAR_W * Math.min(f.total, f.done + f.running)) / f.total) : 0
@@ -200,7 +199,7 @@ ${themeCss()}<style>
 @media (prefers-reduced-motion: reduce){.r0,.r1,.r2,.r3{animation:none}}
 </style>
 <defs><clipPath id="c"><rect x="0" y="0" width="${BAR_W}" height="${BAR_H}" rx="3"/></clipPath></defs>
-<rect x="1" y="${H / 2 - 4}" width="8" height="8" fill="${color}"/>
+<rect class="${tone}" x="1" y="${H / 2 - 4}" width="8" height="8"/>
 <text class="t" x="16" y="${H / 2 + 4.5}" font-family="${FONT}" font-size="13" font-weight="500">${xml(title)}</text>
 <g transform="translate(${BAR_X},${y0})">
 <rect class="k" width="${BAR_W}" height="${BAR_H}" rx="3"/>
@@ -209,8 +208,8 @@ ${rain.map((g, i) => `<g class="r${i}">${g.join('')}</g>`).join('')}
 <g>${faint.join('')}</g>
 <g class="tk">${ticks.join('')}</g>
 </g>
-<rect x="${pillX}" width="${pillW}" height="${BAR_H}" rx="3" fill="${color}"/>
-<text x="${pillX + pillW / 2}" y="${BAR_H / 2 + 4}" text-anchor="middle" font-family="${FONT}" font-size="11" font-weight="600" fill="${PALETTE.surface}">${xml(text)}</text>
+<rect class="${tone}" x="${pillX}" width="${pillW}" height="${BAR_H}" rx="3"/>
+<text x="${pillX + pillW / 2}" y="${BAR_H / 2 + 4}" text-anchor="middle" font-family="${FONT}" font-size="11" font-weight="600" class="pt">${xml(text)}</text>
 </g>
 <text class="m" x="${W - RUNNER_W - 6}" y="${H / 2 + 4.5}" text-anchor="end" font-family="${FONT}" font-size="12.5" font-variant-numeric="tabular-nums">${percent}</text>
 ${SPRITE_CSS}${spriteSvg('mouse', isWorking ? 'running' : 'done', { x: W - RUNNER_W + 3, y: 0, scale: 0.72 })}

@@ -80,6 +80,7 @@ const mainTurn = async ($: Engine, on: On, usage: unknown, reason = 'answer') =>
   mock.clock(on)
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [], cost: { usd: 0.1 } } }) as never)
   on('tool.call', (_$, e) => ({ result: {}, ...(e.tool === 'Bash' ? { isError: true } : {}) }) as never)
+  on('turn.start', () => ({ turnId: 'turn' }) as never)
   on('turn.complete', () => ({ text: '' }) as never)
   await ($.turn.complete as (e: unknown) => Promise<unknown>)({ reason, answer: '', usage })
 }
@@ -108,4 +109,13 @@ test('terminal: an aborted turn with no usage shows dashes, not errors', async (
 test('desktop: the metrics block is drawn in the header', async ($, on) => {
   await mainTurn($, on, USAGE)
   expect((await desktopSources($)).includes('Cache hit')).toBe(true)
+})
+
+// Review fix: an aborted turn must not show the previous turn's figures as its own.
+test('terminal: a turn aborted after a good one shows dashes again', async ($, on) => {
+  await mainTurn($, on, USAGE)
+  await ($.turn.start as (e: unknown) => Promise<unknown>)({ turnId: 'turn2', text: 'again' })
+  await ($.turn.complete as (e: unknown) => Promise<unknown>)({ reason: 'aborted', answer: '', usage: null })
+  expect(await terminalShows($, /^Cache hit —$/)).toBe(true)
+  expect(await terminalShows($, /^First token —$/)).toBe(true)
 })

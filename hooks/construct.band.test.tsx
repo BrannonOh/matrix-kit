@@ -58,3 +58,9 @@ test('terminal: the bar is drawn in phosphor green', async ($, on) => {
   await ui.unmount()
   expect(bar?.props.color).toBe('#00FF41')
 })
+
+// Review fix: light mode darkens every accent, so none may be a fixed neon fill.
+test('desktop: the bar has no hard-coded neon fill that light mode cannot darken', async ($, on) => {
+  await session($, on)
+  expect(/fill="#00FF41"/.test(await bandSource($))).toBe(false)
+})

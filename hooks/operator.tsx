@@ -9,7 +9,7 @@ import type { Metrics } from './lib/metrics.ts'
 import { cacheSavingsOf } from './lib/prices.ts'
 import { stripItems } from './lib/strip.ts'
 import type { StripItem } from './lib/strip.ts'
-import { PALETTE } from './lib/theme.ts'
+import { LIGHT_ACCENTS_CSS, PALETTE } from './lib/theme.ts'
 
 // Responses shorter than this are mostly tool-call stubs: their timing is noise.
 const MIN_TOKENS = 20
@@ -47,7 +47,7 @@ const isBusy = atom({ plugin: 'matrix-kit', key: 'isBusy' } as const, false)
 const warned = atom({ plugin: 'matrix-kit', key: 'warned' } as const, 0)
 
 const ring = (color: string, glyph: string) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">${LIGHT_ACCENTS_CSS}
     <circle cx="12" cy="12" r="10" fill="none" stroke="${color}" stroke-width="2"/>
     ${glyph}</svg>`
 
@@ -66,7 +66,7 @@ const MONEY_ICON = ring(
 const contextIcon = (percent: number) => {
   const c = 2 * Math.PI * 10
   const filled = (Math.min(100, percent) / 100) * c
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">${LIGHT_ACCENTS_CSS}
     <circle cx="12" cy="12" r="10" fill="none" stroke="${MUTED}" stroke-opacity="0.35" stroke-width="2"/>
     <circle cx="12" cy="12" r="10" fill="none" stroke="${CONTEXT}" stroke-width="2" stroke-linecap="round"
       stroke-dasharray="${filled.toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 12 12)"/>
@@ -90,7 +90,7 @@ const pad = (n: number) => String(n).padStart(2, '0')
 const contextBar = (percent: number) => {
   const color = percent >= 85 ? PALETTE.alert : percent >= 65 ? PALETTE.warn : MONEY
   const w = Math.round((Math.min(100, percent) / 100) * 80)
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 6" width="80" height="6">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 6" width="80" height="6">${LIGHT_ACCENTS_CSS}
     <rect width="80" height="6" rx="3" fill="${MUTED}" fill-opacity="0.3"/>
     <rect width="${w}" height="6" rx="3" fill="${color}"/></svg>`
 }
@@ -157,9 +157,11 @@ export const registerOperator = (on: On): void => {
     return { text: hidden ? 'Operator strip hidden.' : 'Operator strip shown.' }
   })
 
+  // Subagents raise turn.start too: only the main loop's starts a prompt.
   on('turn.start', async ($, e, next) => {
+    if (e.agentId !== undefined) return next(e)
     const total = (await $.session.usage()).cost?.usd ?? 0
-    await update($, metrics, m => ({ ...m, turn: m.turn + 1, costAtStart: total, costUsd: total, tools: { ...m.tools, turn: 0, turnErrors: 0 } }))
+    await update($, metrics, m => ({ ...m, turn: m.turn + 1, costAtStart: total, costUsd: total, tools: { ...m.tools, turn: 0, turnErrors: 0 }, ttftMs: null, turnMs: null }))
     await update($, isBusy, () => true)
 
     return next(e)
@@ -189,7 +191,7 @@ export const registerOperator = (on: On): void => {
     await update($, metrics, m => ({
       ...m,
       context: mergeContext(m.context, e.context),
-      rateLimits: e.rateLimits.map(r => ({ kind: r.kind, percentUsed: r.percentUsed, resetsAt: r.resetsAt })),
+      rateLimits: e.rateLimits.map(r => ({ kind: r.kind, percentUsed: r.percentUsed, resetsAt: r.resetsAt ?? null })),
       costUsd: e.cost?.usd ?? m.costUsd,
     }))
     return next(e)
@@ -277,7 +279,7 @@ export async function operatorTurnComplete($: HookArgs<'turn.complete'>[0], e: H
 
   if (e.agentId === undefined) {
     const turn = splitOf(e.usage)
-    await update($, metrics, m => ({ ...m, turnMs: e.durationMs ?? m.turnMs, lastTurn: turn ?? m.lastTurn, session: addSplit(m.session, turn) }))
+    await update($, metrics, m => ({ ...m, turnMs: e.durationMs ?? null, lastTurn: turn, session: addSplit(m.session, turn) }))
     const now = await $.clock.now()
     await update($, cache, () => ({ expiresAt: now + CACHE_TTL_MS, secondsLeft: CACHE_TTL_MS / 1000 }))
     await update($, isBusy, () => false)

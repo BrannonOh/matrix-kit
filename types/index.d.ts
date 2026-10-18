@@ -53,7 +53,8 @@ export type Cache = {
 
 export type TokenSplit = { input: number; output: number; cacheRead: number; cacheWrite: number }
 
-export type RateLimit = { kind: string; percentUsed: number; resetsAt: number }
+// resetsAt is the engine's ISO time, null when it sent none.
+export type RateLimit = { kind: string; percentUsed: number; resetsAt: string | null }
 
 export type Metrics = {
   turn: number

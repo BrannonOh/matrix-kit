@@ -55,3 +55,13 @@ test('no plan limits: nothing about them in the strip', async ($, on) => {
   expect(await ui.findAll({ type: 'Text', text: /5h|limit/ })).toEqual([])
   await ui.unmount()
 })
+
+// Review fix: the strip's icons follow light mode too.
+test('desktop: the strip icons darken in light mode', async ($, on) => {
+  await oneTurn($, on)
+  const ui = await $.ui.mount({ plugin: 'matrix-kit', surface: 'desktop', ...BAND })
+  const icons = (await ui.findAll({ type: 'Svg' })).map(s => String(s.props.source ?? ''))
+  await ui.unmount()
+  expect(icons.length > 0).toBe(true)
+  for (const icon of icons) expect(icon.includes('prefers-color-scheme: light')).toBe(true)
+})
