@@ -29,3 +29,32 @@ test('desktop: the row is still one Svg', async ($, on) => {
   await session($, on)
   expect(await band($, 'desktop')).toEqual({ svg: 1, title: 0, label: 0 })
 })
+
+async function bandSource($: Engine): Promise<string> {
+  const ui = await $.ui.mount({ plugin: 'matrix-kit', surface: 'desktop', ...BAND })
+  const [svg] = await ui.findAll({ type: 'Svg' })
+  await ui.unmount()
+  return String(svg?.props.source ?? '')
+}
+
+test('desktop: the bar fills with green code-rain glyphs, not dots', async ($, on) => {
+  await session($, on)
+  const source = await bandSource($)
+  expect(/<text[^>]*class="acc"[^>]*>[ｱ-ｿ0-9]<\/text>/.test(source)).toBe(true)
+  expect(source.includes('25%')).toBe(true)
+  expect(source.includes('<rect class="t')).toBe(false)
+})
+
+test('desktop: a finished flow glows in the done green', async ($, on) => {
+  await session($, on)
+  await $.tool.call({ tool: 'mcp__matrix-kit__progress', finished: true } as never)
+  expect((await bandSource($)).includes('#3BFF6E')).toBe(true)
+})
+
+test('terminal: the bar is drawn in phosphor green', async ($, on) => {
+  await session($, on)
+  const ui = await $.ui.mount({ plugin: 'matrix-kit', surface: 'terminal', ...BAND })
+  const [bar] = await ui.findAll({ type: 'Text', text: /█/ })
+  await ui.unmount()
+  expect(bar?.props.color).toBe('#00FF41')
+})
