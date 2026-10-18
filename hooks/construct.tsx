@@ -5,6 +5,8 @@ import type { HookArgs, Options } from './lib/shared.ts'
 import type { AgentRun, Flow, Panel, Phase, PlannedTask } from '../types/index.d.ts'
 import { clip, fitText, fmtCost, fmtTime, fmtTokens, textWidth, xml } from './lib/format.ts'
 import { costOf, windowOf } from './lib/prices.ts'
+import { CHARACTER_NAME, TIER_MODEL, TIERS, characterOf, isCrew } from './lib/crew.ts'
+import type { Character, Tier } from './lib/crew.ts'
 
 const flow = atom({ plugin: 'matrix-kit', key: 'flow' } as const, null)
 const agents = atom({ plugin: 'matrix-kit', key: 'agents' } as const, [])
@@ -17,7 +19,7 @@ const now = atom({ plugin: 'matrix-kit', key: 'now' } as const, 0)
 
 const TOOL = 'mcp__matrix-kit__progress'
 const STEP_TOOL = 'mcp__matrix-kit__step'
-// Added to the end of each savvy worker's brief. Their system prompt words step
+// Added to the end of each crew worker's brief. Their system prompt words step
 // reporting as a condition ("if the step tool appears among your tools") and they
 // skip it even with the tool listed; the same request in the brief is followed.
 const STEP_BRIEF = `
@@ -25,7 +27,6 @@ const STEP_BRIEF = `
 Progress reporting: before any other work, call \`${STEP_TOOL}\` with \`total\` (your plan in 3-8 steps) and \`done: 0\`; call it again with \`done\` and a few-word \`note\` as each step finishes. It only draws a progress bar.`
 const PANE = 'savvy-agents'
 const PHASES: readonly Phase[] = ['plan', 'design', 'delegate', 'review', 'close']
-const TIERS: readonly string[] = ['fable', 'heavy', 'careful', 'medium', 'light']
 // The tools' schemas are advice to the model, not a check: what a call may ask
 // the band and the panel to draw is bounded here.
 const MAX_TASKS = 200
@@ -73,16 +74,15 @@ const S = {
   review: 'Review',
   busy: 'running',
   ctx: 'ctx',
-  tier: { light: 'light', medium: 'medium', careful: 'careful', heavy: 'heavy', fable: 'fable', other: 'other' },
   effort: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
 } as const
 
-// Tier and effort words as shown; anything unknown shows as it came.
-const tierWord = (tier: string): string => (S.tier as Record<string, string>)[tier] ?? tier
+// Character and effort words as shown; anything unknown shows as it came.
+const tierWord = (tier: string): string => CHARACTER_NAME[tier as Character] ?? tier
 const effortWord = (effort: string): string => (S.effort as Record<string, string>)[effort] ?? effort
 
 const blank = (): Flow => ({
-  title: 'savvy-flow',
+  title: 'red-pill',
   total: 0,
   done: 0,
   running: 0,
@@ -96,8 +96,8 @@ const isNewFlow = (prev: Flow | null, input: ProgressInput): boolean =>
 
 // Only a known tier is kept: the name is later a key into the tier tables.
 const tierName = (v: string): string => {
-  const t = v.replace(/^savvy-/, '').trim().toLowerCase()
-  return TIERS.includes(t) ? t : ''
+  const t = v.replace(/^matrix-kit:/, '').trim().toLowerCase()
+  return (TIERS as readonly string[]).includes(t) ? t : ''
 }
 
 const cleanTasks = (tasks: ProgressInput['tasks']): PlannedTask[] | undefined =>
@@ -233,41 +233,27 @@ const barText = (f: Flow, width: number): string => {
 // ---------------------------------------------------------------------------
 // Agents panel: every subagent of the session, plus the tasks the flow planned.
 
-const TIER_COLOR: Record<string, string> = {
-  fable: '#7F77DD',
-  heavy: '#D85A30',
-  careful: '#BA7517',
-  medium: '#378ADD',
-  light: '#1D9E75',
-  other: '#888780',
+const TIER_COLOR: Record<Character, string> = {
+  neo: '#7F77DD',
+  morpheus: '#D85A30',
+  trinity: '#BA7517',
+  tank: '#378ADD',
+  mouse: '#1D9E75',
+  oracle: '#888780',
+  smith: '#888780',
 }
 
-// What each savvy tier runs on, for planned tasks that have no run yet.
-const colorOf = (tier: string): string => TIER_COLOR[tier] ?? '#888780'
-
-const TIER_MODEL: Record<string, [model: string, effort: string]> = {
-  fable: ['Fable', 'high'],
-  heavy: ['Opus', 'xhigh'],
-  careful: ['Opus', 'high'],
-  medium: ['Opus', 'medium'],
-  light: ['Opus', 'low'],
-}
+// A character's accent color.
+const colorOf = (tier: string): string => TIER_COLOR[tier as Character] ?? '#888780'
 
 // "Opus · xhigh"; '' for an unknown tier.
 const tierModel = (tier: string): string => {
-  const m = TIER_MODEL[tier]
+  const m = TIER_MODEL[tier as Tier]
   return m ? `${m[0]} · ${effortWord(m[1])}` : ''
 }
 
 // "Opus 5.5 · low" for a run, or just the model when no effort was seen.
 const runModel = (a: AgentRun): string => (a.effort ? `${modelName(a.model)} · ${effortWord(a.effort)}` : modelName(a.model))
-
-// `savvy-careful`, or `savvy-flow:savvy-careful` when the agents ship in a plugin.
-const tierOf = (type: string): string => {
-  const bare = type.replace(/^[^:]*:/, '')
-  const t = bare.replace(/^savvy-/, '').toLowerCase()
-  return Object.hasOwn(TIER_COLOR, t) && bare.startsWith('savvy-') ? t : 'other'
-}
 
 const modelName = (id: string): string => {
   const m = /(fable|mythos|opus|sonnet|haiku)-(\d+)(?:-(\d{1,2})(?!\d))?/i.exec(id)
@@ -421,7 +407,9 @@ const COSTUMES: Record<string, (f: Fill, t: string) => void> = {
   other: f => crabBody(f),
 }
 
-const costumeOf = (type: string): string => (type === 'Explore' ? 'explore' : tierOf(type))
+// The crab costume each character wears until the chibi sprites land.
+const COSTUME: Record<Character, string> = { neo: 'fable', morpheus: 'heavy', trinity: 'careful', tank: 'medium', mouse: 'light', oracle: 'explore', smith: 'other' }
+const costumeOf = (type: string): string => COSTUME[characterOf(type)]
 
 const CRAB_SCALE = 1.1
 
@@ -483,7 +471,7 @@ const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math.round(
 
 const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const s = S
-  const tier = tierOf(a.type)
+  const tier = characterOf(a.type)
   const color = colorOf(tier)
   const ctx = ctxOf(a)
   const textW = W - 42 - 22
@@ -502,7 +490,7 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
     66,
     `${crab(0, 14, costumeOf(a.type), false, a.status === 'running')}
 <text class="t" x="${42}" y="${18}" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
-<text x="${42}" y="${34}" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tierWord(tier))}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
+<text x="${42}" y="${34}" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tierWord(tier))}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
 ${steps && stepsW > 30 ? `<text class="t" x="${42}" y="${49}" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
 <text class="s" x="${42 + barW}" y="${49}" text-anchor="end" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
 <rect class="k" x="${42}" y="55" width="${barW}" height="4" rx="2"/><rect${progress === null ? ' class="m"' : ''} x="${42}" y="55" width="${fillW}" height="4" rx="2"${progress === null ? '' : ` fill="${color}"`}/>
@@ -512,7 +500,7 @@ ${statusMark(W - 8, 16, a.status, color)}
 }
 
 const plannedSvg = (W: number, p: Planned): string => {
-  const tier = p.tier in TIER_COLOR ? p.tier : 'other'
+  const tier = p.tier in TIER_COLOR ? p.tier : 'smith'
   const color = colorOf(tier)
   const textW = W - 42 - 22
   const meta = [tierModel(tier)]
@@ -520,7 +508,7 @@ const plannedSvg = (W: number, p: Planned): string => {
   return svg(
     W,
     46,
-    `${crab(0, 6, tier, true)}
+    `${crab(0, 6, COSTUME[tier as Character] ?? 'other', true)}
 <text class="s" x="${42}" y="${18}" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(`${p.n}. ${p.title}`, 13, textW))}</text>
 <text x="${42}" y="${34}" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tierWord(tier))}</tspan><tspan class="m">  ${xml(meta.filter(Boolean).join('  ·  '))}</tspan></text>
 ${statusMark(W - 8, 16, 'planned', color)}
@@ -530,9 +518,9 @@ ${statusMark(W - 8, 16, 'planned', color)}
 
 const compactSvg = (W: number, list: AgentRun[], planned: Planned[], t: ReturnType<typeof totals>): string => {
   const icons = [
-    ...list.filter(a => a.status === 'running').map(a => ({ k: costumeOf(a.type), c: colorOf(tierOf(a.type)), s: 'running', dim: false })),
-    ...list.filter(a => a.status !== 'running').map(a => ({ k: costumeOf(a.type), c: colorOf(tierOf(a.type)), s: a.status, dim: false })),
-    ...planned.map(p => ({ k: p.tier in TIER_COLOR ? p.tier : 'other', c: colorOf(p.tier), s: 'planned', dim: true })),
+    ...list.filter(a => a.status === 'running').map(a => ({ k: costumeOf(a.type), c: colorOf(characterOf(a.type)), s: 'running', dim: false })),
+    ...list.filter(a => a.status !== 'running').map(a => ({ k: costumeOf(a.type), c: colorOf(characterOf(a.type)), s: a.status, dim: false })),
+    ...planned.map(p => ({ k: COSTUME[(p.tier in TIER_COLOR ? p.tier : 'smith') as Character], c: colorOf(p.tier), s: 'planned', dim: true })),
   ]
   const fit = Math.max(1, Math.floor((W - 150) / 36))
   const shown = icons.slice(0, fit)
@@ -632,7 +620,7 @@ export const registerConstruct = (on: On, opts: Options): void => {
   // Safety net: worker launches move the faint layer even if the orchestrator forgets to report.
   on('tool.call', { tool: 'Agent' }, async ($, e, next) => {
     const type = String(e.subagent_type ?? '')
-    if (!type.startsWith('savvy-')) return next(e)
+    if (!isCrew(type)) return next(e)
 
     await update($, flow, prev => {
       const base = prev && !prev.isFinished ? { ...blank(), ...prev } : blank()
@@ -646,7 +634,7 @@ export const registerConstruct = (on: On, opts: Options): void => {
   })
 
   on('agent.spawn', async ($, e, next) => {
-    const isUnbriefed = e.subagentType.startsWith('savvy-') && !e.prompt.includes(STEP_TOOL)
+    const isUnbriefed = isCrew(e.subagentType) && !e.prompt.includes(STEP_TOOL)
     const started = await next(isUnbriefed ? { ...e, prompt: e.prompt + STEP_BRIEF } : e)
     if (started.deny !== undefined) return started
 
@@ -671,9 +659,9 @@ export const registerConstruct = (on: On, opts: Options): void => {
       return [...list.filter(a => a.id !== run.id), run].slice(-200)
     })
     await update($, now, () => at)
-    if (e.subagentType.startsWith('savvy-')) {
+    if (isCrew(e.subagentType)) {
       const f = await read($, flow)
-      await autoOpen($, f && !f.isFinished ? f.title : 'savvy-flow')
+      await autoOpen($, f && !f.isFinished ? f.title : 'red-pill')
     } else if (options.autoOpen === 'any') {
       await autoOpen($, 'any-agent')
     }
@@ -770,7 +758,7 @@ export const registerConstruct = (on: On, opts: Options): void => {
     const cols = Math.max(24, e.props.bodyColumns || 40)
     const barW = Math.max(6, Math.min(20, cols - 34))
     const row = (a: AgentRun) => {
-      const tier = tierOf(a.type)
+      const tier = characterOf(a.type)
       const color = colorOf(tier)
       const ctx = ctxOf(a)
       const progress = progressOf(a)
@@ -787,7 +775,7 @@ export const registerConstruct = (on: On, opts: Options): void => {
           </Box>
           <Text dimColor wrap="truncate-end">
             {'  '}
-            {tier === 'other' ? a.type : tierWord(tier)} · {model}
+            {tierWord(tier)} · {model}
             {a.round > 1 ? ` · ${s.round} ${a.round}` : ''}
           </Text>
           <Text wrap="truncate-end">
@@ -816,7 +804,7 @@ export const registerConstruct = (on: On, opts: Options): void => {
         {p.isCompact ? (
           <Text wrap="truncate-end">
             {[...running, ...finished].map(a => (
-              <Text key={a.id} color={colorOf(tierOf(a.type))}>
+              <Text key={a.id} color={colorOf(characterOf(a.type))}>
                 {STATUS_GLYPH[a.status]}{' '}
               </Text>
             ))}
@@ -835,7 +823,7 @@ export const registerConstruct = (on: On, opts: Options): void => {
             {!p.isDoneCollapsed && finished.map(row)}
             {planned.length > 0 && <Text dimColor>{s.planned} · {planned.length}</Text>}
             {planned.map(pl => {
-              const tier = pl.tier in TIER_COLOR ? pl.tier : 'other'
+              const tier = pl.tier in TIER_COLOR ? pl.tier : 'smith'
               return (
                 <Box key={`plan-${pl.n}`} flexDirection="column" marginBottom={1}>
                   <Text dimColor wrap="truncate-end">
@@ -862,7 +850,7 @@ export async function constructSessionStart($: HookArgs<'session.start'>[0], e: 
   await $.tool.register({
     name: 'progress',
     description:
-      'Report /savvy-flow progress to the progress bar above the prompt and the agents panel. ' +
+      'Report /red-pill progress to the progress bar above the prompt and the agents panel. ' +
       'Call it after presenting the plan (title, total, tasks, phase "delegate"), each time a task is accepted (done), ' +
       'when switching phase or re-planning (tasks), and once at the end with finished: true. Fields left out keep their previous value. ' +
       'For the main session only: a call from a subagent is ignored (workers report with `step`).',
@@ -894,7 +882,7 @@ export async function constructSessionStart($: HookArgs<'session.start'>[0], e: 
   await $.tool.register({
     name: 'step',
     description:
-      'For savvy-flow workers: report progress on your own task to the agents panel. ' +
+      'For red-pill crew workers: report progress on your own task to the agents panel. ' +
       'Right after reading the brief, call it with `total` (your plan in 3-8 steps) and `done: 0`; ' +
       'call it again as each step finishes. Cheap and silent: it only draws a bar.',
     inputSchema: {

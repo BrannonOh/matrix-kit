@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
 const PLUGIN = 'matrix-kit'
 const PROGRESS = 'mcp__matrix-kit__progress'
@@ -11,8 +11,8 @@ const plan = {
   title: 'Ship the thing',
   phase: 'delegate',
   tasks: [
-    { title: 'Write the parser', tier: 'careful' },
-    { title: 'Wire the CLI', tier: 'light', after: [1] },
+    { title: 'Write the parser', tier: 'trinity' },
+    { title: 'Wire the CLI', tier: 'mouse', after: [1] },
   ],
 } as const
 
@@ -43,7 +43,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const tasks = [
       { title: 'Odd one', tier: '__proto__' },
       { title: 'Odd two', tier: 'constructor' },
-      ...Array.from({ length: 500 }, (_, i) => ({ title: `Task ${i}`, tier: 'light' })),
+      ...Array.from({ length: 500 }, (_, i) => ({ title: `Task ${i}`, tier: 'mouse' })),
     ]
     const reported = await $.tool.call({ tool: PROGRESS, title: 'Odd input', phase: 'delegate', tasks, total: 1e9 } as never)
     expect(reported).toMatchObject({ result: 'ok: Tasks 0/200' })
@@ -71,5 +71,26 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     const started = await $.tool.call({ tool: PROGRESS, title: 'Another flow', phase: 'delegate', total: 3 } as never)
     expect(started).toMatchObject({ result: 'ok: Tasks 0/3' })
+  })
+}
+
+// A crew worker is told to report its steps and brings the panel up; any other agent is left as it came.
+for (const [subagentType, isBriefed] of [['matrix-kit:trinity', true], ['savvy-careful', false]] as const) {
+  test(`spawn: ${subagentType} ${isBriefed ? 'is' : 'is not'} briefed to report steps`, async ($, on) => {
+    mock.clock(on)
+    const opened: string[] = []
+    on('ui.open', (_$, e) => {
+      opened.push(e.id)
+      return { value: { isPlaced: true } }
+    })
+    let prompt = ''
+    on('agent.spawn', (_$, e) => {
+      prompt = e.prompt
+      return { model: 'claude-opus-5-5', agentId: 'a1' } as never
+    })
+    await $.agent.spawn({ tool_use_id: 't1', prompt: 'Fix the parser', description: 'Fix it', subagentType, provider: 'engine', parentModel: 'claude-opus-5-5', background: false, fork: false } as never)
+
+    expect(prompt.includes('mcp__matrix-kit__step')).toBe(isBriefed)
+    expect(opened.length).toBe(isBriefed ? 1 : 0)
   })
 }
