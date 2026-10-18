@@ -27,7 +27,7 @@ const step = async ($: Engine, model: string) => {
 }
 
 const shows = async ($: Engine, text: RegExp) => {
-  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: 'savvy-agents', props: pane })
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: 'matrix-construct', props: pane })
   return ui.find({ type: 'Text', text })
 }
 
