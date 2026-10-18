@@ -3,7 +3,9 @@ import type { EngineInterface, On } from 'claude-code'
 import type { HookArgs, Options } from './lib/shared.ts'
 
 import type { AgentRun, Flow, Panel, Phase, PlannedTask } from '../types/index.d.ts'
-import { clip, fitText, fmtCost, fmtTime, fmtTokens, modelName, textWidth, xml } from './lib/format.ts'
+import { clip, fitText, fmtCost, fmtDuration, fmtTime, fmtTokens, modelName, textWidth, xml } from './lib/format.ts'
+import { emptyMetrics, hitRate } from './lib/metrics.ts'
+import type { Metrics } from './lib/metrics.ts'
 import { costOf, windowOf } from './lib/prices.ts'
 import { MONO_FONT, PALETTE, glyphAt, noise, themeCss } from './lib/theme.ts'
 import { CHARACTER_COLOR, SPRITE_CSS, badgeOf, spriteSvg } from './lib/sprites.ts'
@@ -18,6 +20,8 @@ const panel = atom({ plugin: 'matrix-kit', key: 'panel' } as const, {
   autoOpenedFor: '',
 })
 const now = atom({ plugin: 'matrix-kit', key: 'now' } as const, 0)
+// The operator's figures (operator.tsx writes them; the scan wants each file's atoms its own).
+const metrics = atom({ plugin: 'matrix-kit', key: 'metrics' } as const, emptyMetrics() as Metrics)
 
 const TOOL = 'mcp__matrix-kit__progress'
 const STEP_TOOL = 'mcp__matrix-kit__step'
@@ -385,6 +389,47 @@ const compactSvg = (W: number, list: AgentRun[], planned: Planned[], t: ReturnTy
   )
 }
 
+// The metrics block: the operator's figures for the session, one tile each.
+type Tile = { label: string; value: string; isAlert?: boolean }
+
+const pct = (r: number | null): string => (r === null ? '—' : `${Math.round(r * 100)}%`)
+
+const metricTiles = (m: Metrics, running: number, clock: number): Tile[] => {
+  const t = m.lastTurn
+  return [
+    { label: 'First token', value: m.ttftMs === null ? '—' : fmtDuration(m.ttftMs) },
+    { label: 'Turn', value: m.turnMs === null ? '—' : fmtDuration(m.turnMs) },
+    { label: 'Tokens', value: t ? `in ${fmtTokens(t.input)} · out ${fmtTokens(t.output)} · read ${fmtTokens(t.cacheRead)} · write ${fmtTokens(t.cacheWrite)}` : '—' },
+    { label: 'Cache hit', value: pct(hitRate(t)) },
+    { label: 'Saved', value: `≈${fmtCost(m.cacheSavingsUsd)}` },
+    { label: 'Tools', value: `${m.tools.session}${m.tools.sessionErrors ? ` (${m.tools.sessionErrors} err)` : ''}`, isAlert: m.tools.sessionErrors > 0 },
+    { label: 'Lines', value: `+${m.linesAdded} −${m.linesRemoved}` },
+    { label: 'Running', value: String(running) },
+    { label: 'Session', value: m.startedAt === null ? '—' : fmtTime(clock - m.startedAt) },
+    { label: 'Prompts', value: String(m.turn) },
+  ]
+}
+
+const TILE_H = 40
+const TILE_GAP = 6
+const tileCols = (W: number): number => (W >= 420 ? 3 : 2)
+const metricsHeight = (W: number, n: number): number => Math.ceil(n / tileCols(W)) * (TILE_H + TILE_GAP)
+
+const metricsSvg = (W: number, tiles: Tile[]): string => {
+  const cols = tileCols(W)
+  const tw = (W - TILE_GAP * (cols - 1)) / cols
+  const body = tiles
+    .map((tile, i) => {
+      const x = (i % cols) * (tw + TILE_GAP)
+      const y = Math.floor(i / cols) * (TILE_H + TILE_GAP)
+      return `<rect class="tile" x="${x}" y="${y}" width="${tw}" height="${TILE_H}" rx="4"/>
+<text class="s" x="${x + 9}" y="${y + 15}" font-family="${FONT}" font-size="11">${xml(tile.label)}</text>
+<text ${tile.isAlert ? `fill="${PALETTE.alert}"` : 'class="t"'} x="${x + 9}" y="${y + 32}" font-family="${FONT}" font-size="13" font-weight="600" font-variant-numeric="tabular-nums">${xml(fitText(tile.value, 13, tw - 18))}</text>`
+    })
+    .join('\n')
+  return svg(W, metricsHeight(W, tiles.length), body)
+}
+
 // --- terminal drawing: the same rows in text.
 
 const ctxBar = (pct: number, width: number): string => {
@@ -526,12 +571,13 @@ export const registerConstruct = (on: On, opts: Options): void => {
     const f = await read($, flow)
     const p: Panel = await read($, panel)
     const at = Math.max(await read($, now), ...list.map(a => a.startedAt), 0)
+    const tiles = metricTiles(await read($, metrics), list.filter(a => a.status === 'running').length, await $.clock.now())
 
     const running = list.filter(a => a.status === 'running').reverse()
     const finished = list.filter(a => a.status !== 'running').reverse()
     const planned = plannedOf(f, list)
     const t = totals(list, at)
-    // The pane's title says "Agents"; inside, only the flow's own name.
+    // The pane's title says "The Construct"; inside, only the flow's own name.
     const title = f && !f.isFinished ? f.title : ''
 
     const toggleCompact = (
@@ -572,7 +618,7 @@ export const registerConstruct = (on: On, opts: Options): void => {
       }
       const shownDone = p.isDoneCollapsed ? 0 : finished.length
       const lines = 1 + (isEmpty ? 1 : 0) + (running.length > 0 ? 1 : 0) + (finished.length > 0 ? 1 : 0) + (planned.length > 0 ? 1 : 0)
-      const gridH = headerHeight(title) + lines * LINE_H + (running.length + shownDone) * 66 + planned.length * 46
+      const gridH = headerHeight(title) + metricsHeight(W, tiles.length) + lines * LINE_H + (running.length + shownDone) * 66 + planned.length * 46
       return (
         <Box flexDirection="column">
           {/* The grid sizes the pane; the content is placed over it, as an
@@ -582,6 +628,7 @@ export const registerConstruct = (on: On, opts: Options): void => {
           ))}
           <Box flexDirection="column" position="absolute" top={0} left={0} right={0}>
             <Svg source={headerSvg(W, title, t)} alt={title ? `${title}: ${summary}` : summary} width={W} height={headerHeight(title)} />
+            <Svg source={metricsSvg(W, tiles)} alt={tiles.map(m => `${m.label} ${m.value}`).join(', ')} width={W} height={metricsHeight(W, tiles.length)} />
             {toggleCompact}
             {isEmpty && <Text dimColor>{s.empty}</Text>}
             {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
@@ -649,6 +696,11 @@ export const registerConstruct = (on: On, opts: Options): void => {
         <Text dimColor>
           ≈{fmtCost(t.cost)} · {fmtTokens(t.tokens)} {s.tokensWord} · {fmtTime(t.time)}
         </Text>
+        {tiles.map(m => (
+          <Text key={`m-${m.label}`} dimColor={!m.isAlert} color={m.isAlert ? PALETTE.alert : undefined} wrap="truncate-end">
+            {`${m.label} ${m.value}`}
+          </Text>
+        ))}
         {p.isCompact ? (
           <Text wrap="truncate-end">
             {[...running, ...finished].map(a => (

@@ -74,3 +74,38 @@ test('/construct opens The Construct, and again closes it', async ($, on) => {
   expect(await $.command.run({ command: 'construct', args: '' } as never)).toMatchObject({ text: 'The Construct opened.' })
   expect(await $.command.run({ command: 'construct', args: '' } as never)).toMatchObject({ text: 'The Construct closed.' })
 })
+
+// The metrics block: a main turn's figures, as the operator collected them.
+const mainTurn = async ($: Engine, on: On, usage: unknown, reason = 'answer') => {
+  mock.clock(on)
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [], cost: { usd: 0.1 } } }) as never)
+  on('tool.call', (_$, e) => ({ result: {}, ...(e.tool === 'Bash' ? { isError: true } : {}) }) as never)
+  on('turn.complete', () => ({ text: '' }) as never)
+  await ($.turn.complete as (e: unknown) => Promise<unknown>)({ reason, answer: '', usage })
+}
+
+const USAGE = { model: 'claude-opus-5-5', input_tokens: 100, output_tokens: 5, cache_read_input_tokens: 300, cache_creation_input_tokens: 100 }
+
+test('terminal: the metrics block shows the cache hit rate of the last turn', async ($, on) => {
+  await mainTurn($, on, USAGE)
+  expect(await terminalShows($, /^Cache hit 60%$/)).toBe(true)
+})
+
+test('terminal: tool calls are counted with their errors', async ($, on) => {
+  await mainTurn($, on, USAGE)
+  await $.tool.call({ tool: 'Bash', command: 'false' } as never)
+  expect(await terminalShows($, /^Tools 1 \(1 err\)$/)).toBe(true)
+})
+
+// Review Focus 1: an interrupted turn reports no usage; nothing may throw and unknowns read "—".
+test('terminal: an aborted turn with no usage shows dashes, not errors', async ($, on) => {
+  await mainTurn($, on, null, 'aborted')
+  expect(await terminalShows($, /^First token —$/)).toBe(true)
+  expect(await terminalShows($, /^Cache hit —$/)).toBe(true)
+  expect(await terminalShows($, /^Turn —$/)).toBe(true)
+})
+
+test('desktop: the metrics block is drawn in the header', async ($, on) => {
+  await mainTurn($, on, USAGE)
+  expect((await desktopSources($)).includes('Cache hit')).toBe(true)
+})

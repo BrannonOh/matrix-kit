@@ -39,6 +39,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
   // The schema's enum and bounds are advice to the model: a call outside them must still draw.
   test(`${surface}: input outside the tool's schema cannot break the drawing`, async ($, on) => {
+    mock.clock(on)
     on('ui.open', () => ({ value: { isPlaced: true } }))
     const tasks = [
       { title: 'Odd one', tier: '__proto__' },
