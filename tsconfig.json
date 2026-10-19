@@ -1,0 +1,7 @@
+{
+  "extends": "./.claude-plugin/types/tsconfig.json",
+  "compilerOptions": {
+    // The hooks import each other with their .ts/.tsx extensions, as the engine loads them.
+    "allowImportingTsExtensions": true
+  }
+}

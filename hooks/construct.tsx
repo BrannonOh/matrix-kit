@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On } from 'claude-code'
-import type { HookArgs, Options } from './lib/shared.ts'
+import type { AbovePromptInput, HookArgs, Options, Then } from './lib/shared.ts'
 
 import type { AgentRun, Flow, Panel, Phase, PlannedTask } from '../types/index.d.ts'
 import { clip, fitText, fmtCost, fmtDuration, fmtTime, fmtTokens, modelName, textWidth, xml } from './lib/format.ts'
@@ -728,7 +728,7 @@ export const registerConstruct = (on: On, opts: Options): void => {
 
 }
 
-export async function constructSessionStart($: HookArgs<'session.start'>[0], e: HookArgs<'session.start'>[1], next: HookArgs<'session.start'>[2]) {
+export async function constructSessionStart($: HookArgs<'session.start'>[0], e: HookArgs<'session.start'>[1], next: Then<'session.start'>) {
   const started = await next(e)
   await $.tool.register({
     name: 'progress',
@@ -797,7 +797,7 @@ export async function constructSessionStart($: HookArgs<'session.start'>[0], e: 
   return started
 }
 
-export async function* constructTurnStep($: HookArgs<'turn.step'>[0], e: HookArgs<'turn.step'>[1], next: HookArgs<'turn.step'>[2]) {
+export async function* constructTurnStep($: HookArgs<'turn.step'>[0], e: HookArgs<'turn.step'>[1], next: Then<'turn.step'>) {
   const result = yield* next(e)
   const agentId = e.agentId
   const usage = result.usage
@@ -834,7 +834,7 @@ export async function* constructTurnStep($: HookArgs<'turn.step'>[0], e: HookArg
   return result
 }
 
-export async function constructTurnComplete($: HookArgs<'turn.complete'>[0], e: HookArgs<'turn.complete'>[1], next: HookArgs<'turn.complete'>[2]) {
+export async function constructTurnComplete($: HookArgs<'turn.complete'>[0], e: HookArgs<'turn.complete'>[1], next: Then<'turn.complete'>) {
   const agentId = e.agentId
   if (agentId) {
     const at = await $.clock.now()
@@ -866,7 +866,7 @@ export async function constructTurnComplete($: HookArgs<'turn.complete'>[0], e: 
   return next(e)
 }
 
-export async function constructAbovePrompt($: HookArgs<'ui.render'>[0], e: HookArgs<'ui.render'>[1], next: HookArgs<'ui.render'>[2]) {
+export async function constructAbovePrompt($: HookArgs<'ui.render'>[0], e: AbovePromptInput, next: Then<'ui.render', AbovePromptInput>) {
   const f = await read($, flow)
   if (f === null || e.props.hasSurvey) return next(e)
   // Draw this row with the other mods' bands beneath it. Claude Code's own placeholder ({ type: 'engine' }) is

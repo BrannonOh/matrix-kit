@@ -1,22 +1,17 @@
 import type { On } from 'claude-code'
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
+
+import { BASE_USAGE, prompt, startSession } from './testing.ts'
 
 const BAND = { component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 120 } as never } as const
 
 // A session with one main turn done, so the strip has something to show.
 async function oneTurn($: Engine, on: On, rateLimits: unknown[] = []) {
-  mock.clock(on)
-  on('session.start', async () => ({ cwd: '/repo' }) as never)
-  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000, tokens: 380_000, percent: 38 }, rateLimits, cost: { usd: 0.42 } } }) as never)
   on('session.measure', (_$, e) => ({ changed: e.changed }) as never)
-  on('turn.start', () => ({ turnId: 'turn' }) as never)
-  on('turn.complete', () => ({ text: '' }) as never)
-  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
+  await startSession($, on, { usage: { startedAt: 0, context: { window: 1_000_000, tokens: 380_000, percent: 38 }, rateLimits, cost: { usd: 0.42 } } })
   await $.session.measure({ context: { window: 1_000_000, tokens: 380_000, percent: 38 }, rateLimits, cost: { usd: 0.42 }, changed: ['context'] } as never)
-  await ($.turn.start as (e: unknown) => Promise<unknown>)({ turnId: 'turn', text: 'hi' })
-  await ($.turn.complete as (e: unknown) => Promise<unknown>)({ reason: 'answer', answer: 'ok', durationMs: 1000, usage: null })
+  await prompt($)
 }
 
 const strip = async ($: Engine) => $.ui.mount({ plugin: 'matrix-kit', surface: 'terminal', ...BAND })
@@ -69,15 +64,8 @@ test('desktop: the strip icons darken in light mode', async ($, on) => {
 
 // A turn where the engine reports no cost and no context figures yet.
 async function bareTurn($: Engine, on: On, cost?: { usd: number }) {
-  mock.clock(on)
-  on('session.start', async () => ({ cwd: '/repo' }) as never)
-  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [], ...(cost ? { cost } : {}) } }) as never)
-  on('turn.start', () => ({ turnId: 'turn' }) as never)
-  on('turn.complete', () => ({ text: '' }) as never)
-  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
-  await ($.turn.start as (e: unknown) => Promise<unknown>)({ turnId: 'turn', text: 'hi' })
-  await ($.turn.complete as (e: unknown) => Promise<unknown>)({ reason: 'answer', answer: 'ok', durationMs: 1000, usage: null })
+  await startSession($, on, { usage: { ...BASE_USAGE, ...(cost ? { cost } : {}) } })
+  await prompt($)
 }
 
 test('no cost from the engine: both costs read "—", not $0.00', async ($, on) => {
@@ -105,14 +93,7 @@ test('the strip formats money like the panel', async ($, on) => {
 
 test('no cost at the prompt\'s start: its cost is "—" even once a session cost arrives', async ($, on) => {
   let cost: { usd: number } | undefined
-  mock.clock(on)
-  on('session.start', async () => ({ cwd: '/repo' }) as never)
-  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
-  on('tool.register', (_$, e) => ({ value: { tool: e.name } }) as never)
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000, tokens: 1_000, percent: 1 }, rateLimits: [], ...(cost ? { cost } : {}) } }) as never)
-  on('turn.start', () => ({ turnId: 'turn' }) as never)
-  on('turn.complete', () => ({ text: '' }) as never)
-  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
+  await startSession($, on, { usage: () => ({ startedAt: 0, context: { window: 1_000_000, tokens: 1_000, percent: 1 }, rateLimits: [], ...(cost ? { cost } : {}) }) })
   await ($.turn.start as (e: unknown) => Promise<unknown>)({ turnId: 'turn', text: 'hi' })
   cost = { usd: 0.42 }
   await ($.turn.complete as (e: unknown) => Promise<unknown>)({ reason: 'answer', answer: 'ok', durationMs: 1000, usage: null })

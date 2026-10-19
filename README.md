@@ -52,15 +52,19 @@ To load it in every session, desktop app included, add the folder to the `env` b
 
 ## Develop
 
-```bash
-claude plugin validate --strict .
-```
+Install once; this also points git at `.githooks/`, whose pre-commit hook runs the check:
 
 ```bash
-claude plugin test .
+npm install
 ```
 
-The design is in `docs/specs/`, and the build plan in `docs/plans/`.
+The check is a typecheck, the strict validator and the full test suite:
+
+```bash
+npm run check
+```
+
+The typecheck needs `.claude-plugin/types/`, which Claude Code writes when it loads the mod. The design is in `docs/specs/`, the build plan in `docs/plans/`, and the review rules in `CODING_STANDARDS.md`.
 
 **Two rules the validator enforces:**
 

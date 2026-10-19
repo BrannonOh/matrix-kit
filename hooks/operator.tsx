@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, On } from 'claude-code'
-import type { HookArgs, Options } from './lib/shared.ts'
+import type { EngineInterface, On, RenderChildren } from 'claude-code'
+import type { AbovePromptInput, HookArgs, Options, Then } from './lib/shared.ts'
 
 import type { Cache } from '../types/index.d.ts'
 import { fmtCost, fmtTokens, modelName } from './lib/format.ts'
@@ -197,7 +197,7 @@ export const registerOperator = (on: On): void => {
 
 }
 
-export async function operatorSessionStart($: HookArgs<'session.start'>[0], e: HookArgs<'session.start'>[1], next: HookArgs<'session.start'>[2]) {
+export async function operatorSessionStart($: HookArgs<'session.start'>[0], e: HookArgs<'session.start'>[1], next: Then<'session.start'>) {
   const result = await next(e)
 
   await $.command.register({
@@ -232,7 +232,7 @@ export async function operatorSessionStart($: HookArgs<'session.start'>[0], e: H
 
 // Each model request: the main thread's model, effort, time to first token and speed;
 // every request's cache savings. The stream's own result is passed on unchanged.
-export async function* operatorTurnStep($: HookArgs<'turn.step'>[0], e: HookArgs<'turn.step'>[1], next: HookArgs<'turn.step'>[2]) {
+export async function* operatorTurnStep($: HookArgs<'turn.step'>[0], e: HookArgs<'turn.step'>[1], next: Then<'turn.step'>) {
   const isMain = e.agentId === undefined
   const hookAt = await $.clock.now()
   if (isMain) await update($, metrics, m => ({ ...m, model: e.model || m.model, effort: e.effort === undefined ? m.effort : String(e.effort) }))
@@ -274,7 +274,7 @@ export async function* operatorTurnStep($: HookArgs<'turn.step'>[0], e: HookArgs
   }
 }
 
-export async function operatorTurnComplete($: HookArgs<'turn.complete'>[0], e: HookArgs<'turn.complete'>[1], next: HookArgs<'turn.complete'>[2]) {
+export async function operatorTurnComplete($: HookArgs<'turn.complete'>[0], e: HookArgs<'turn.complete'>[1], next: Then<'turn.complete'>) {
   const result = await next(e)
 
   if (e.agentId === undefined) {
@@ -293,7 +293,7 @@ export async function operatorTurnComplete($: HookArgs<'turn.complete'>[0], e: H
 // Plan-limit windows by the short names the strip uses.
 const LIMIT_NAME: Record<string, string> = { five_hour: '5h', seven_day: '7d', spend_limit: 'spend' }
 
-export async function operatorAbovePrompt($: HookArgs<'ui.render'>[0], e: HookArgs<'ui.render'>[1], next: HookArgs<'ui.render'>[2]) {
+export async function operatorAbovePrompt($: HookArgs<'ui.render'>[0], e: AbovePromptInput, next: Then<'ui.render', AbovePromptInput>) {
   const m = await read($, metrics)
   if (e.props.hasSurvey || m.turn === 0 || (await read($, isHidden))) return next(e)
 
@@ -331,7 +331,7 @@ export async function operatorAbovePrompt($: HookArgs<'ui.render'>[0], e: HookAr
       <Text bold color={textColor}>{text}</Text>
     </Box>
   )
-  const drawn: Record<StripItem, () => unknown> = {
+  const drawn: Record<StripItem, () => RenderChildren> = {
     speed: () => item('speed', SPEED_ICON, '»', SPEED, `${m.speed ?? '—'} tok/s`),
     turnCost: () => item('turnCost', MONEY_ICON, '$', MONEY, m.turnCostUsd === null ? '—' : fmtCost(m.turnCostUsd), MONEY),
     sessionCost: () => <Text key="sessionCost" bold>{`| ${m.costUsd === null ? '—' : fmtCost(m.costUsd)}`}</Text>,

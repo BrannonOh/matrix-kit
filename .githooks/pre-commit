@@ -1,0 +1,8 @@
+#!/bin/sh
+# Typecheck, strict validate and the full test suite before every commit.
+# The engine types in .claude-plugin/types/ are written when Claude Code loads this mod.
+if [ ! -f .claude-plugin/types/tsconfig.json ]; then
+  echo "pre-commit: .claude-plugin/types/ is missing; load matrix-kit in Claude Code once to write it." >&2
+  exit 1
+fi
+npm run --silent check

@@ -1,6 +1,8 @@
 import type { On } from 'claude-code'
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
+
+import { startSession } from './testing.ts'
 
 const MODEL = 'claude-opus-5-5'
 const USAGE = { input_tokens: 100, output_tokens: 5, cache_read_input_tokens: 300, cache_creation_input_tokens: 100 }
@@ -8,14 +10,8 @@ const USAGE = { input_tokens: 100, output_tokens: 5, cache_read_input_tokens: 30
 // A started session whose engine answers tool calls, turns and usage reads; `mocks`
 // adds the test's own answers first, since every hook must be on before the first $ call.
 async function session($: Engine, on: On, mocks: (on: On) => void = () => {}) {
-  mock.clock(on)
   mocks(on)
-  on('session.start', async () => ({ cwd: '/repo' }) as never)
-  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
-  on('session.usage', () => ({ value: { startedAt: 1_000, context: { window: 1_000_000 }, rateLimits: [], cost: { usd: 0.5 } } }) as never)
-  on('turn.start', () => ({ turnId: 'turn' }) as never)
-  on('turn.complete', () => ({ text: '' }) as never)
-  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
+  await startSession($, on, { usage: { startedAt: 1_000, context: { window: 1_000_000 }, rateLimits: [], cost: { usd: 0.5 } } })
 }
 
 const metrics = async ($: Engine) => {

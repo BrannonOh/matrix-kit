@@ -2,6 +2,8 @@ import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
+import { startSession } from './testing.ts'
+
 const PLUGIN = 'matrix-kit'
 const PANE = 'matrix-construct'
 const pane = { title: '', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} } as const
@@ -58,9 +60,6 @@ test('a worker whose turn ends in an error shows as failed', async ($, on) => {
 
 test('/construct opens The Construct, and again closes it', async ($, on) => {
   // The command is registered at session start.
-  mock.clock(on)
-  on('session.start', async () => ({ cwd: '/repo' }) as never)
-  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
   const panes: { id: string }[] = []
   on('ui.open', (_$, e) => {
     panes.push({ id: e.id })
@@ -71,7 +70,7 @@ test('/construct opens The Construct, and again closes it', async ($, on) => {
     panes.splice(panes.findIndex(p => p.id === e.id), 1)
     return { value: undefined } as never
   })
-  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
+  await startSession($, on)
   expect(await $.command.run({ command: 'construct', args: '' } as never)).toMatchObject({ text: 'The Construct opened.' })
   expect(await $.command.run({ command: 'construct', args: '' } as never)).toMatchObject({ text: 'The Construct closed.' })
 })
@@ -140,13 +139,8 @@ test('desktop: the panel darkens its greens in light mode', async ($, on) => {
 })
 
 test('the session clock keeps ticking in an open Construct while nothing runs', async ($, on) => {
-  const clock = mock.clock(on)
-  on('session.start', async () => ({ cwd: '/repo' }) as never)
-  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
-  on('tool.register', (_$, e) => ({ value: { tool: e.name } }) as never)
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [] } }) as never)
   on('ui.panes', () => ({ value: [{ id: PANE }] }) as never)
-  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
+  const clock = await startSession($, on)
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PANE, props: pane })
   expect(await ui.find({ type: 'Text', text: /^Session 0:00$/ })).toBeDefined()
   await clock.advance(5_000)
@@ -155,13 +149,8 @@ test('the session clock keeps ticking in an open Construct while nothing runs', 
 })
 
 test('the session clock stays still while The Construct is closed and nothing runs', async ($, on) => {
-  const clock = mock.clock(on)
-  on('session.start', async () => ({ cwd: '/repo' }) as never)
-  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
-  on('tool.register', (_$, e) => ({ value: { tool: e.name } }) as never)
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [] } }) as never)
   on('ui.panes', () => ({ value: [] }) as never)
-  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
+  const clock = await startSession($, on)
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PANE, props: pane })
   await clock.advance(5_000)
   expect(await ui.find({ type: 'Text', text: /^Session 0:00$/ })).toBeDefined()

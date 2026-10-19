@@ -6,6 +6,8 @@ import { CHARACTER_COLOR, CHARACTER_LIGHT_COLOR, SPRITE_CSS, badgeOf, spriteSvg 
 const CHARACTERS: readonly Character[] = ['neo', 'morpheus', 'trinity', 'tank', 'mouse', 'oracle', 'smith']
 const STATES = ['running', 'done', 'failed', 'planned'] as const
 
+const rgb = (hex: string): [number, number, number] => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)]
+
 for (const c of CHARACTERS) {
   for (const state of STATES) {
     test(`sprite: ${c} ${state} is tagged and small`, () => {
@@ -40,7 +42,7 @@ test('badgeOf: seven different letters for the terminal', () => {
 
 test('CHARACTER_COLOR: every badge is a shade of green', () => {
   for (const [c, hex] of Object.entries(CHARACTER_COLOR)) {
-    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16))
+    const [r, g, b] = rgb(hex)
     expect(`${c} ${g > r && g > b}`).toBe(`${c} true`)
   }
 })
@@ -48,15 +50,15 @@ test('CHARACTER_COLOR: every badge is a shade of green', () => {
 // WCAG contrast of a colour against white.
 const contrastOnWhite = (hex: string): number => {
   const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
-  const [r, g, b] = [1, 3, 5].map(i => lin(parseInt(hex.slice(i, i + 2), 16) / 255))
-  return 1.05 / (0.2126 * r + 0.7152 * g + 0.0722 * b + 0.05)
+  const [r, g, b] = rgb(hex)
+  return 1.05 / (0.2126 * lin(r / 255) + 0.7152 * lin(g / 255) + 0.0722 * lin(b / 255) + 0.05)
 }
 
 test('CHARACTER_LIGHT_COLOR: each crew member keeps a green of their own on white', () => {
   const shades = Object.values(CHARACTER_LIGHT_COLOR)
   expect(new Set(shades).size).toBe(7)
   for (const [c, hex] of Object.entries(CHARACTER_LIGHT_COLOR)) {
-    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16))
+    const [r, g, b] = rgb(hex)
     expect(`${c} ${g > r && g > b}`).toBe(`${c} true`)
     expect(`${c} ${contrastOnWhite(hex) >= 4.5}`).toBe(`${c} true`)
   }

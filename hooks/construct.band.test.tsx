@@ -1,13 +1,13 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
+
+import { startSession } from './testing.ts'
 
 const BAND = { component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 100 } as never } as const
 
 async function session($: Engine, on: On) {
-  mock.clock(on, { now: Date.parse('2026-10-10T02:00:00Z') })
-  on('session.start', async () => ({ cwd: '/repo' }) as never)
-  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
+  await startSession($, on, { now: Date.parse('2026-10-10T02:00:00Z') })
   await $.tool.call({ tool: 'mcp__matrix-kit__progress', title: 'Ship it', total: 4, done: 1, phase: 'delegate' } as never)
 }
 
