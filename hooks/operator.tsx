@@ -3,7 +3,7 @@ import type { EngineInterface, On } from 'claude-code'
 import type { HookArgs, Options } from './lib/shared.ts'
 
 import type { Cache } from '../types/index.d.ts'
-import { fmtTokens, modelName } from './lib/format.ts'
+import { fmtCost, fmtTokens, modelName } from './lib/format.ts'
 import { addSplit, emptyMetrics, mergeContext, roomLeft, splitOf } from './lib/metrics.ts'
 import type { Metrics } from './lib/metrics.ts'
 import { cacheSavingsOf } from './lib/prices.ts'
@@ -95,8 +95,6 @@ const contextBar = (percent: number) => {
     <rect width="${w}" height="6" rx="3" fill="${color}"/></svg>`
 }
 
-const usd = (n: number) => `$${n.toFixed(2)}`
-
 // Last measured width, for `/operator width` while tuning lib/strip.ts; debug only.
 let lastColumns: number | null = null
 
@@ -104,7 +102,7 @@ async function refresh($: EngineInterface) {
   const { cost, context, startedAt } = await $.session.usage()
   await update($, metrics, m => {
     const costUsd = cost?.usd ?? m.costUsd
-    return { ...m, costUsd, turnCostUsd: costUsd - m.costAtStart, context: mergeContext(m.context, context), startedAt }
+    return { ...m, costUsd, turnCostUsd: costUsd === null || m.costAtStart === null ? null : costUsd - m.costAtStart, context: mergeContext(m.context, context), startedAt }
   })
 }
 
@@ -160,8 +158,8 @@ export const registerOperator = (on: On): void => {
   // Subagents raise turn.start too: only the main loop's starts a prompt.
   on('turn.start', async ($, e, next) => {
     if (e.agentId !== undefined) return next(e)
-    const total = (await $.session.usage()).cost?.usd ?? 0
-    await update($, metrics, m => ({ ...m, turn: m.turn + 1, costAtStart: total, costUsd: total, tools: { ...m.tools, turn: 0, turnErrors: 0 }, ttftMs: null, turnMs: null }))
+    const total = (await $.session.usage()).cost?.usd ?? null
+    await update($, metrics, m => ({ ...m, turn: m.turn + 1, costAtStart: total, costUsd: total ?? m.costUsd, tools: { ...m.tools, turn: 0, turnErrors: 0 }, ttftMs: null, turnMs: null }))
     await update($, isBusy, () => true)
 
     return next(e)
@@ -206,6 +204,8 @@ export async function operatorSessionStart($: HookArgs<'session.start'>[0], e: H
     name: 'operator',
     description: 'Show or hide the operator metrics strip; `demo <minutes>` previews the cache warning',
   })
+  // The session clock and cost are known from the start, before the first prompt.
+  await refresh($).catch(() => undefined)
 
   $.clock.every(1000, async () => {
     const expiresAt = (await read($, cache)).expiresAt
@@ -318,7 +318,7 @@ export async function operatorAbovePrompt($: HookArgs<'ui.render'>[0], e: HookAr
 
   lastColumns = e.props.bodyColumns
   const items = stripItems(e.props.bodyColumns, m.rateLimits.length > 0)
-  const percent = m.context.percent ?? 0
+  const percent = m.context.percent
   const limits = m.rateLimits.map(r => `${LIMIT_NAME[r.kind] ?? r.kind} ${Math.round(r.percentUsed)}%`).join(' · ')
   const worst = Math.round(Math.max(0, ...m.rateLimits.map(r => r.percentUsed)))
   const room = roomLeft(m.context)
@@ -333,14 +333,14 @@ export async function operatorAbovePrompt($: HookArgs<'ui.render'>[0], e: HookAr
   )
   const drawn: Record<StripItem, () => unknown> = {
     speed: () => item('speed', SPEED_ICON, '»', SPEED, `${m.speed ?? '—'} tok/s`),
-    turnCost: () => item('turnCost', MONEY_ICON, '$', MONEY, m.turnCostUsd === null ? '—' : usd(m.turnCostUsd), MONEY),
-    sessionCost: () => <Text key="sessionCost" bold>{`| ${usd(m.costUsd)}`}</Text>,
+    turnCost: () => item('turnCost', MONEY_ICON, '$', MONEY, m.turnCostUsd === null ? '—' : fmtCost(m.turnCostUsd), MONEY),
+    sessionCost: () => <Text key="sessionCost" bold>{`| ${m.costUsd === null ? '—' : fmtCost(m.costUsd)}`}</Text>,
     cache: () => item('cache', cacheIcon(level ?? CACHE), '⧗', level ?? CACHE, cacheText, level ?? undefined),
     context: () => (
       <Box key="context" flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
-        {Svg ? <Svg source={contextIcon(percent)} alt="context" width={ICON} height={ICON} /> : <Text color={CONTEXT}>◔</Text>}
-        {Svg && items.includes('room') ? <Svg source={contextBar(percent)} alt={`context ${percent}%`} width={80} height={6} /> : null}
-        <Text bold>{`${percent}%`}</Text>
+        {Svg ? <Svg source={contextIcon(percent ?? 0)} alt="context" width={ICON} height={ICON} /> : <Text color={CONTEXT}>◔</Text>}
+        {Svg && items.includes('room') && percent !== null ? <Svg source={contextBar(percent)} alt={`context ${percent}%`} width={80} height={6} /> : null}
+        <Text bold>{percent === null ? '—' : `${percent}%`}</Text>
       </Box>
     ),
     limits: () => item('limits', null, '▤', MUTED, limits),

@@ -60,6 +60,7 @@ test('/construct opens The Construct, and again closes it', async ($, on) => {
   // The command is registered at session start.
   mock.clock(on)
   on('session.start', async () => ({ cwd: '/repo' }) as never)
+  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
   const panes: { id: string }[] = []
   on('ui.open', (_$, e) => {
     panes.push({ id: e.id })
@@ -118,4 +119,51 @@ test('terminal: a turn aborted after a good one shows dashes again', async ($, o
   await ($.turn.complete as (e: unknown) => Promise<unknown>)({ reason: 'aborted', answer: '', usage: null })
   expect(await terminalShows($, /^Cache hit —$/)).toBe(true)
   expect(await terminalShows($, /^First token —$/)).toBe(true)
+})
+
+test('desktop: the crew totals live in the metrics block, not in separate header tiles', async ($, on) => {
+  await mainTurn($, on, USAGE)
+  const source = await desktopSources($)
+  expect(source.includes('rx="8"')).toBe(false)
+  expect(source.includes('Crew cost')).toBe(true)
+})
+
+test('terminal: lines changed are labelled as the workers\' own', async ($, on) => {
+  await mainTurn($, on, USAGE)
+  expect(await terminalShows($, /^Worker lines \+0 −0$/)).toBe(true)
+})
+
+test('desktop: the panel darkens its greens in light mode', async ($, on) => {
+  await worker($, on, 'matrix-kit:neo')
+  const source = await desktopSources($)
+  expect(/prefers-color-scheme: light\)\{[^}]*\[fill="#00FF41"\]/.test(source)).toBe(true)
+})
+
+test('the session clock keeps ticking in an open Construct while nothing runs', async ($, on) => {
+  const clock = mock.clock(on)
+  on('session.start', async () => ({ cwd: '/repo' }) as never)
+  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
+  on('tool.register', (_$, e) => ({ value: { tool: e.name } }) as never)
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [] } }) as never)
+  on('ui.panes', () => ({ value: [{ id: PANE }] }) as never)
+  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PANE, props: pane })
+  expect(await ui.find({ type: 'Text', text: /^Session 0:00$/ })).toBeDefined()
+  await clock.advance(5_000)
+  expect(await ui.find({ type: 'Text', text: /^Session 0:05$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the session clock stays still while The Construct is closed and nothing runs', async ($, on) => {
+  const clock = mock.clock(on)
+  on('session.start', async () => ({ cwd: '/repo' }) as never)
+  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
+  on('tool.register', (_$, e) => ({ value: { tool: e.name } }) as never)
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [] } }) as never)
+  on('ui.panes', () => ({ value: [] }) as never)
+  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PANE, props: pane })
+  await clock.advance(5_000)
+  expect(await ui.find({ type: 'Text', text: /^Session 0:00$/ })).toBeDefined()
+  await ui.unmount()
 })

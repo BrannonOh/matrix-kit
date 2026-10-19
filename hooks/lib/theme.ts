@@ -31,6 +31,12 @@ export const themeCss = (): string => `<style>
 @media (prefers-color-scheme: light){.t{fill:#1F2A22}.m{fill:#5A7A62}.k{fill:#E6ECE7}.tk{fill:#B9C9BD}.acc{fill:${PALETTE.lightGreen}}.dn{fill:${PALETTE.lightGreen}}.pt{fill:#FFFFFF}}
 </style>`
 
-// For drawings that colour with attributes (the strip's icons): light mode darkens the greens.
-const GREENS = [PALETTE.green, PALETTE.done, PALETTE.green2]
-export const LIGHT_ACCENTS_CSS = `<style>@media (prefers-color-scheme: light){${GREENS.map(g => `[stroke="${g}"]`).join(',')}{stroke:${PALETTE.lightGreen}}${GREENS.map(g => `[fill="${g}"]`).join(',')}{fill:${PALETTE.lightGreen}}}</style>`
+// For drawings that colour with attributes: in light mode each of `greens` darkens to the light-mode green.
+export const lightGreensCss = (greens: readonly string[]): string => {
+  const list = [...new Set(greens)]
+  return `<style>@media (prefers-color-scheme: light){${list.map(g => `[fill="${g}"]`).join(',')}{fill:${PALETTE.lightGreen}}${list.map(g => `[stroke="${g}"]`).join(',')}{stroke:${PALETTE.lightGreen}}}</style>`
+}
+
+export const GREENS = [PALETTE.green, PALETTE.done, PALETTE.green2]
+// The strip's icons.
+export const LIGHT_ACCENTS_CSS = lightGreensCss(GREENS)

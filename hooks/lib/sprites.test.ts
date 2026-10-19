@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Character } from './crew.ts'
-import { SPRITE_CSS, badgeOf, spriteSvg } from './sprites.ts'
+import { CHARACTER_COLOR, SPRITE_CSS, badgeOf, spriteSvg } from './sprites.ts'
 
 const CHARACTERS: readonly Character[] = ['neo', 'morpheus', 'trinity', 'tank', 'mouse', 'oracle', 'smith']
 const STATES = ['running', 'done', 'failed', 'planned'] as const
@@ -36,4 +36,11 @@ test('badgeOf: seven different letters for the terminal', () => {
   const letters = CHARACTERS.map(c => badgeOf(c).letter)
   expect(new Set(letters).size).toBe(7)
   expect(letters).toEqual(['N', 'M', 'T', 'K', 'm', 'O', 'S'])
+})
+
+test('CHARACTER_COLOR: every badge is a shade of green', () => {
+  for (const [c, hex] of Object.entries(CHARACTER_COLOR)) {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16))
+    expect(`${c} ${g > r && g > b}`).toBe(`${c} true`)
+  }
 })

@@ -198,14 +198,15 @@ export const spriteSvg = (c: Character, state: SpriteState, at: { x: number; y: 
 }
 
 // Each character's accent: the terminal badge colour and the panel's name colour.
+// All greens, each its own shade; Neo keeps the phosphor green.
 export const CHARACTER_COLOR: Record<Character, string> = {
   neo: PALETTE.green,
-  morpheus: '#E0846B',
+  morpheus: '#2E8B57',
   trinity: '#9AE6B4',
-  tank: '#E2A94E',
-  mouse: '#5FA8D3',
-  oracle: '#C9A227',
-  smith: '#9A9A9A',
+  tank: '#A8D84E',
+  mouse: '#4DD0B0',
+  oracle: '#D8E86A',
+  smith: '#7A8F7E',
 }
 
 const LETTER: Record<Character, string> = { neo: 'N', morpheus: 'M', trinity: 'T', tank: 'K', mouse: 'm', oracle: 'O', smith: 'S' }

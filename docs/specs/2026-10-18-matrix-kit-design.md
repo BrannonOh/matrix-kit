@@ -106,7 +106,7 @@ The engine loads exactly one hooks module. `register.tsx` imports `construct.tsx
 From top to bottom:
 
 1. **Flow title** (if a flow is running).
-2. **Metrics block:** the panel metrics from section 6, as small tiles. It replaces the original's three tiles (cost / tokens / time), which move inside it.
+2. **Metrics block:** the panel metrics from section 6, as small tiles. It replaces the original's three tiles (cost / tokens / time), which move inside it as "Crew cost", "Crew tokens" and "Crew time"; the header above it holds only the flow title. In the terminal each tile is one line of the same list.
 3. **Crew:** running, then finished (collapsible), then planned (dimmed). Each row shows:
    - the sprite, task description, character name and model · effort;
    - the task's own step progress, or context fill in grey when the worker doesn't report steps;
@@ -120,6 +120,8 @@ Auto-open setting (`userConfig.autoOpen`): `crew` (default) opens the panel when
 
 One row above the prompt, in the session-band style. Section 6 lists what's in it and in what order items drop off. The `×` hides it for the session, and `/operator` toggles it. `/operator demo <minutes>` previews the cache colours and warning, as `/session_data demo` did.
 
+Debug options, for tests and tuning: `/operator json` prints every collected figure, and `/operator width` reports the strip's measured width and which items fit.
+
 ## 6. Metrics
 
 Sources come from the plugin-authoring reference for Claude Code 2.1.299. The cost and price fields are estimates computed from token counts.
@@ -128,9 +130,9 @@ Sources come from the plugin-authoring reference for Claude Code 2.1.299. The co
 |---|---|---|---|---|
 | 2 | Output speed (tok/s) | strip | `turn.step` stream: `stop` chunk `usage.output_tokens` ÷ time from first chunk | main thread; same noise filters as the original (≥20 tokens, ≥0.5 s, ≤1000 tok/s) |
 | 3 | Last prompt cost | strip | `session.usage().cost.usd` delta between `turn.start` and `turn.complete` | `—` when cost is absent |
-| 4 | Session cost | strip | `session.usage().cost.usd` | |
+| 4 | Session cost | strip | `session.usage().cost.usd` | `—` until a cost is reported; money is formatted as in the panel |
 | 5 | Cache countdown | strip | 1 h from the last main-thread `turn.complete` | amber at 20 min, red at 10 min; `…` while working |
-| 6 | Context fill % | strip | `session.usage().context.percent` | missing right after compaction: keep the last value |
+| 6 | Context fill % | strip | `session.usage().context.percent` | missing right after compaction: keep the last value; `—` before the first figure |
 | 12 | Plan usage limits | strip | `session.usage().rateLimits` (`five_hour`, `seven_day`, `spend_limit`: `percentUsed`, `resetsAt`) | hidden when the list is empty (not on a subscription) |
 | 13 | Model · effort | strip | `turn.step` input `model`, `effort` (main thread) | effort may be a number: shown as-is |
 | 18 | Room left in context | strip | `context.window − context.tokens` | labelled "left"; Claude Code compacts before the window is full, so this is an upper bound |
@@ -140,12 +142,12 @@ Sources come from the plugin-authoring reference for Claude Code 2.1.299. The co
 | 10 | Cache hit rate | panel | cache_read ÷ (input + cache_read + cache_write), from turn usage | last turn and session |
 | 11 | Cache savings | panel | Σ cache_read × (input price − cache-read price) from `lib/prices.ts` | main thread and subagents; estimate |
 | 14 | Tool calls | panel | a `tool.call` hook counting every tool; `isError` on the result | this turn and session; errors in red |
-| 15 | Lines changed by workers | panel | `Agent` tool result `toolStats.linesAdded` / `linesRemoved` | workers only, labelled so |
+| 15 | Lines changed by workers | panel | `Agent` tool result `toolStats.linesAdded` / `linesRemoved` | workers only, labelled "Worker lines" |
 | 16 | Agents running | panel | count of running rows in the crew state | |
-| 17 | Session clock | panel | `session.usage().startedAt` | |
-| 1 | Turn number | panel | `$.session.turns()` | moved off the strip to make room |
+| 17 | Session clock | panel | `session.usage().startedAt` | read once at `session.start`, so it counts before the first prompt |
+| 1 | Turn number | panel | the operator's own count of main-conversation prompts, incremented at each main `turn.start` | moved off the strip to make room |
 
-**Refresh:** metrics update on the `session.measure` event and on turn events rather than polling. A 1-second `$.clock.every` ticks only the clocks (cache countdown, elapsed times), and only while something is counting.
+**Refresh:** metrics update on the `session.measure` event and on turn events rather than polling. A 1-second `$.clock.every` ticks only the clocks (cache countdown, elapsed times, session clock), and only while something is counting or The Construct is open.
 
 **Strip drop order** as the window narrows, first dropped first: room left (18) → usage limits shown as one combined % instead of two → model · effort (13) → session cost (4) → tok/s (2). Cost of the last prompt, the cache countdown and context % stay last.
 

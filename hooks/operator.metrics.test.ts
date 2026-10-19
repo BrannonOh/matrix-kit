@@ -11,6 +11,7 @@ async function session($: Engine, on: On, mocks: (on: On) => void = () => {}) {
   mock.clock(on)
   mocks(on)
   on('session.start', async () => ({ cwd: '/repo' }) as never)
+  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
   on('session.usage', () => ({ value: { startedAt: 1_000, context: { window: 1_000_000 }, rateLimits: [], cost: { usd: 0.5 } } }) as never)
   on('turn.start', () => ({ turnId: 'turn' }) as never)
   on('turn.complete', () => ({ text: '' }) as never)
@@ -84,4 +85,14 @@ test('a plan limit keeps its reset time as given, null when absent', async ($, o
     { kind: 'five_hour', percentUsed: 42, resetsAt: '2026-10-18T05:00:00Z' },
     { kind: 'seven_day', percentUsed: 9, resetsAt: null },
   ])
+})
+
+test('the session clock starts when the session does, before any prompt', async ($, on) => {
+  await session($, on)
+  expect((await metrics($)).startedAt).toBe(1_000)
+})
+
+test('a resumed session: before any prompt there is no last prompt cost', async ($, on) => {
+  await session($, on)
+  expect((await metrics($)).turnCostUsd).toBe(null)
 })

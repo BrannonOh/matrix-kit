@@ -7,7 +7,7 @@ import { clip, fitText, fmtCost, fmtDuration, fmtTime, fmtTokens, modelName, tex
 import { emptyMetrics, hitRate } from './lib/metrics.ts'
 import type { Metrics } from './lib/metrics.ts'
 import { costOf, windowOf } from './lib/prices.ts'
-import { MONO_FONT, PALETTE, glyphAt, noise, themeCss } from './lib/theme.ts'
+import { GREENS, MONO_FONT, PALETTE, glyphAt, lightGreensCss, noise, themeCss } from './lib/theme.ts'
 import { CHARACTER_COLOR, SPRITE_CSS, badgeOf, spriteSvg } from './lib/sprites.ts'
 import { CHARACTER_NAME, TIER_MODEL, TIERS, characterOf, isCrew } from './lib/crew.ts'
 import type { Character, Tier } from './lib/crew.ts'
@@ -52,9 +52,9 @@ type ProgressInput = {
 // The words the bar and the panel draw.
 const S = {
   pane: 'The Construct',
-  cost: 'Cost',
-  tokens: 'Tokens',
-  time: 'Time',
+  cost: 'Crew cost',
+  tokens: 'Crew tokens',
+  time: 'Crew time',
   collapse: 'Collapse',
   expand: 'Expand',
   running: 'Running',
@@ -78,12 +78,10 @@ const S = {
   review: 'Review',
   busy: 'running',
   ctx: 'ctx',
-  effort: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
 } as const
 
-// Character and effort words as shown; anything unknown shows as it came.
+// Character names as shown; anything unknown shows as it came.
 const tierWord = (tier: string): string => CHARACTER_NAME[tier as Character] ?? tier
-const effortWord = (effort: string): string => (S.effort as Record<string, string>)[effort] ?? effort
 
 const blank = (): Flow => ({
   title: 'red-pill',
@@ -133,12 +131,11 @@ const merge = (prev: Flow | null, input: ProgressInput): Flow => {
 }
 
 const label = (f: Flow): string => {
-  const s = S
-  if (f.isFinished) return s.done
-  if (f.phase === 'plan') return s.plan
-  if (f.phase === 'design') return s.design
-  const count = f.total ? `${f.done}/${f.total}` : `${f.running} ${s.busy}`
-  return `${f.phase === 'review' ? s.review : s.tasks} ${count}`
+  if (f.isFinished) return S.done
+  if (f.phase === 'plan') return S.plan
+  if (f.phase === 'design') return S.design
+  const count = f.total ? `${f.done}/${f.total}` : `${f.running} ${S.busy}`
+  return `${f.phase === 'review' ? S.review : S.tasks} ${count}`
 }
 
 const ratio = (f: Flow): number => (f.isFinished ? 1 : f.total ? f.done / f.total : 0)
@@ -230,11 +227,11 @@ const colorOf = (c: string): string => CHARACTER_COLOR[c as Character] ?? CHARAC
 // "Opus · xhigh"; '' for an unknown tier.
 const tierModel = (tier: string): string => {
   const m = TIER_MODEL[tier as Tier]
-  return m ? `${m[0]} · ${effortWord(m[1])}` : ''
+  return m ? `${m[0]} · ${m[1]}` : ''
 }
 
 // "Opus 5.5 · low" for a run, or just the model when no effort was seen.
-const runModel = (a: AgentRun): string => (a.effort ? `${modelName(a.model)} · ${effortWord(a.effort)}` : modelName(a.model))
+const runModel = (a: AgentRun): string => (a.effort ? `${modelName(a.model)} · ${a.effort}` : modelName(a.model))
 
 
 const norm = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
@@ -279,7 +276,7 @@ const PANE_CSS = `<style>
 @media (prefers-color-scheme: light){.t{fill:#1F2A22}.s{fill:#4F6B57}.m{fill:#7A947F}.k{fill:#E6ECE7}.ln{stroke:#D5E0D7}.tile{fill:#EEF3EF}}
 .live{animation:p 1.6s ease-in-out infinite}@keyframes p{50%{opacity:.3}}
 @media (prefers-reduced-motion: reduce){.live{animation:none}}
-</style>`
+</style>${lightGreensCss([...GREENS, ...Object.values(CHARACTER_COLOR)])}`
 
 const statusMark = (x: number, y: number, status: string, color: string): string => {
   if (status === 'running') return `<circle class="live" cx="${x}" cy="${y}" r="3.5" fill="${color}"/>`
@@ -292,24 +289,10 @@ const svg = (W: number, H: number, body: string): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${PANE_CSS}${SPRITE_CSS}${body}</svg>`
 
 // The pane's own title already says "The Construct": the header names the flow, if any.
-const headerSvg = (W: number, title: string, t: ReturnType<typeof totals>): string => {
-  const s = S
-  const gap = 6
-  const tw = (W - gap * 2) / 3
-  const top = title ? 28 : 0
-  const tile = (i: number, k: string, v: string) =>
-    `<rect class="tile" x="${i * (tw + gap)}" y="${top}" width="${tw}" height="40" rx="8"/>
-<text class="s" x="${i * (tw + gap) + 9}" y="${top + 16}" font-family="${FONT}" font-size="11">${k}</text>
-<text class="t" x="${i * (tw + gap) + 9}" y="${top + 33}" font-family="${FONT}" font-size="15" font-weight="600" font-variant-numeric="tabular-nums">${v}</text>`
-  return svg(
-    W,
-    headerHeight(title),
-    `${title ? `<text class="t" x="${0}" y="${15}" font-family="${FONT}" font-size="14" font-weight="600">${xml(fitText(title, 14, W))}</text>` : ''}
-${tile(0, s.cost, '≈' + fmtCost(t.cost))}${tile(1, s.tokens, fmtTokens(t.tokens))}${tile(2, s.time, fmtTime(t.time))}`,
-  )
-}
+const headerSvg = (W: number, title: string): string =>
+  svg(W, headerHeight(title), `<text class="t" x="${0}" y="${15}" font-family="${FONT}" font-size="14" font-weight="600">${xml(fitText(title, 14, W))}</text>`)
 
-const headerHeight = (title: string): number => (title ? 72 : 44)
+const headerHeight = (title: string): number => (title ? 24 : 0)
 
 // The task's own progress when the worker reports steps; a finished run is full.
 const progressOf = (a: AgentRun): number | null => {
@@ -321,17 +304,16 @@ const progressOf = (a: AgentRun): number | null => {
 const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math.round((a.contextTokens / a.contextMax) * 100)) : 0)
 
 const agentSvg = (W: number, a: AgentRun, at: number): string => {
-  const s = S
   const tier = characterOf(a.type)
   const color = colorOf(tier)
   const ctx = ctxOf(a)
   const textW = W - 42 - 22
   const meta = [runModel(a)]
-  if (a.round > 1) meta.push(`${s.round} ${a.round}`)
-  if (a.status === 'failed') meta.push(s.failed)
+  if (a.round > 1) meta.push(`${S.round} ${a.round}`)
+  if (a.status === 'failed') meta.push(S.failed)
   const barW = textW
   const progress = progressOf(a)
-  const stats = `${s.ctx} ${ctx}% · ${fmtTokens(a.contextTokens)}  ≈${fmtCost(a.costUsd)}  ${fmtTime(elapsed(a, at))}`
+  const stats = `${S.ctx} ${ctx}% · ${fmtTokens(a.contextTokens)}  ≈${fmtCost(a.costUsd)}  ${fmtTime(elapsed(a, at))}`
   const steps = a.stepTotal ? `${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' · ' + a.stepNote : ''}` : ''
   const stepsW = Math.max(0, barW - textWidth(stats, 11) - 12)
   // Without reported steps the bar falls back to the context, drawn grey.
@@ -393,16 +375,19 @@ type Tile = { label: string; value: string; isAlert?: boolean }
 
 const pct = (r: number | null): string => (r === null ? '—' : `${Math.round(r * 100)}%`)
 
-const metricTiles = (m: Metrics, running: number, clock: number): Tile[] => {
+const metricTiles = (m: Metrics, crew: ReturnType<typeof totals>, running: number, clock: number): Tile[] => {
   const t = m.lastTurn
   return [
+    { label: S.cost, value: `≈${fmtCost(crew.cost)}` },
+    { label: S.tokens, value: fmtTokens(crew.tokens) },
+    { label: S.time, value: fmtTime(crew.time) },
     { label: 'First token', value: m.ttftMs === null ? '—' : fmtDuration(m.ttftMs) },
     { label: 'Turn', value: m.turnMs === null ? '—' : fmtDuration(m.turnMs) },
     { label: 'Tokens', value: t ? `in ${fmtTokens(t.input)} · out ${fmtTokens(t.output)} · read ${fmtTokens(t.cacheRead)} · write ${fmtTokens(t.cacheWrite)}` : '—' },
     { label: 'Cache hit', value: pct(hitRate(t)) },
     { label: 'Saved', value: `≈${fmtCost(m.cacheSavingsUsd)}` },
     { label: 'Tools', value: `${m.tools.session}${m.tools.sessionErrors ? ` (${m.tools.sessionErrors} err)` : ''}`, isAlert: m.tools.sessionErrors > 0 },
-    { label: 'Lines', value: `+${m.linesAdded} −${m.linesRemoved}` },
+    { label: 'Worker lines', value: `+${m.linesAdded} −${m.linesRemoved}` },
     { label: 'Running', value: String(running) },
     { label: 'Session', value: m.startedAt === null ? '—' : fmtTime(clock - m.startedAt) },
     { label: 'Prompts', value: String(m.turn) },
@@ -563,26 +548,25 @@ export const registerConstruct = (on: On, opts: Options): void => {
   // Each model request of a subagent: live context, tokens and cost.
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const s = S
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
     const list = await read($, agents)
     const f = await read($, flow)
     const p: Panel = await read($, panel)
     const at = Math.max(await read($, now), ...list.map(a => a.startedAt), 0)
-    const tiles = metricTiles(await read($, metrics), list.filter(a => a.status === 'running').length, await $.clock.now())
+    const t = totals(list, at)
+    const tiles = metricTiles(await read($, metrics), t, list.filter(a => a.status === 'running').length, await $.clock.now())
 
     const running = list.filter(a => a.status === 'running').reverse()
     const finished = list.filter(a => a.status !== 'running').reverse()
     const planned = plannedOf(f, list)
-    const t = totals(list, at)
     // The pane's title says "The Construct"; inside, only the flow's own name.
     const title = f && !f.isFinished ? f.title : ''
 
     const toggleCompact = (
       <Button
         key="compact"
-        label={p.isCompact ? s.expand : s.collapse}
+        label={p.isCompact ? S.expand : S.collapse}
         plain
         onPress={() => update($, panel, prev => ({ ...prev, isCompact: !prev.isCompact }))}
       />
@@ -590,13 +574,13 @@ export const registerConstruct = (on: On, opts: Options): void => {
     const toggleDone = (
       <Button
         key="done"
-        label={`${p.isDoneCollapsed ? '▸' : '▾'} ${s.finished} · ${finished.length}`}
+        label={`${p.isDoneCollapsed ? '▸' : '▾'} ${S.finished} · ${finished.length}`}
         plain
         onPress={() => update($, panel, prev => ({ ...prev, isDoneCollapsed: !prev.isDoneCollapsed }))}
       />
     )
     const isEmpty = list.length === 0 && planned.length === 0
-    const summary = `≈${fmtCost(t.cost)}, ${fmtTokens(t.tokens)} ${s.tokensWord}, ${fmtTime(t.time)}`
+    const summary = `≈${fmtCost(t.cost)}, ${fmtTokens(t.tokens)} ${S.tokensWord}, ${fmtTime(t.time)}`
 
     if (e.surface === 'desktop' && 'Svg' in ui) {
       const { Svg } = ui
@@ -610,7 +594,7 @@ export const registerConstruct = (on: On, opts: Options): void => {
       if (p.isCompact) {
         return (
           <Box flexDirection="column" gap={1}>
-            <Svg source={compactSvg(W, list, planned, t)} alt={`${list.length} ${s.agentsCount}, ${summary}`} width={W} height={32} />
+            <Svg source={compactSvg(W, list, planned, t)} alt={`${list.length} ${S.agentsCount}, ${summary}`} width={W} height={32} />
             {toggleCompact}
           </Box>
         )
@@ -626,22 +610,22 @@ export const registerConstruct = (on: On, opts: Options): void => {
             <Svg key={`grid-${i}`} source={gridSvg(W, tileH)} alt="dotted grid" width={W} height={tileH} />
           ))}
           <Box flexDirection="column" position="absolute" top={0} left={0} right={0}>
-            <Svg source={headerSvg(W, title, t)} alt={title ? `${title}: ${summary}` : summary} width={W} height={headerHeight(title)} />
+            {title && <Svg source={headerSvg(W, title)} alt={title} width={W} height={headerHeight(title)} />}
             <Svg source={metricsSvg(W, tiles)} alt={tiles.map(m => `${m.label} ${m.value}`).join(', ')} width={W} height={metricsHeight(W, tiles.length)} />
             {toggleCompact}
-            {isEmpty && <Text dimColor>{s.empty}</Text>}
-            {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
+            {isEmpty && <Text dimColor>{S.empty}</Text>}
+            {running.length > 0 && section('h-run', `${S.running} · ${running.length}`)}
             {running.map(a => (
-              <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isRunning}`} width={W} height={66} />
+              <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${S.isRunning}`} width={W} height={66} />
             ))}
             {finished.length > 0 && toggleDone}
             {!p.isDoneCollapsed &&
               finished.map(a => (
-                <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isFinished}`} width={W} height={66} />
+                <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${S.isFinished}`} width={W} height={66} />
               ))}
-            {planned.length > 0 && section('h-plan', `${s.planned} · ${planned.length}`)}
+            {planned.length > 0 && section('h-plan', `${S.planned} · ${planned.length}`)}
             {planned.map(pl => (
-              <Svg key={`plan-${pl.n}`} source={plannedSvg(W, pl)} alt={`${pl.n}. ${pl.title}: ${s.isPlanned}`} width={W} height={46} />
+              <Svg key={`plan-${pl.n}`} source={plannedSvg(W, pl)} alt={`${pl.n}. ${pl.title}: ${S.isPlanned}`} width={W} height={46} />
             ))}
           </Box>
         </Box>
@@ -670,14 +654,14 @@ export const registerConstruct = (on: On, opts: Options): void => {
           <Text dimColor wrap="truncate-end">
             {'  '}
             {tierWord(tier)} · {model}
-            {a.round > 1 ? ` · ${s.round} ${a.round}` : ''}
+            {a.round > 1 ? ` · ${S.round} ${a.round}` : ''}
           </Text>
           <Text wrap="truncate-end">
             {'  '}
             {progress === null ? <Text dimColor>{ctxBar(ctx, barW)}</Text> : <Text color={color}>{ctxBar(progress * 100, barW)}</Text>}
             <Text dimColor>
               {' '}
-              {steps}{s.ctx} {ctx}% · {fmtTokens(a.contextTokens)} ≈{fmtCost(a.costUsd)} {fmtTime(elapsed(a, at))}
+              {steps}{S.ctx} {ctx}% · {fmtTokens(a.contextTokens)} ≈{fmtCost(a.costUsd)} {fmtTime(elapsed(a, at))}
             </Text>
           </Text>
         </Box>
@@ -692,9 +676,6 @@ export const registerConstruct = (on: On, opts: Options): void => {
           </Text>
           {toggleCompact}
         </Box>
-        <Text dimColor>
-          ≈{fmtCost(t.cost)} · {fmtTokens(t.tokens)} {s.tokensWord} · {fmtTime(t.time)}
-        </Text>
         {tiles.map(m => (
           <Text key={`m-${m.label}`} dimColor={!m.isAlert} color={m.isAlert ? PALETTE.alert : undefined} wrap="truncate-end">
             {`${m.label} ${m.value}`}
@@ -715,12 +696,12 @@ export const registerConstruct = (on: On, opts: Options): void => {
           </Text>
         ) : (
           <Box flexDirection="column" marginTop={1}>
-            {isEmpty && <Text dimColor>{s.empty}</Text>}
-            {running.length > 0 && <Text dimColor>{s.running} · {running.length}</Text>}
+            {isEmpty && <Text dimColor>{S.empty}</Text>}
+            {running.length > 0 && <Text dimColor>{S.running} · {running.length}</Text>}
             {running.map(row)}
             {finished.length > 0 && toggleDone}
             {!p.isDoneCollapsed && finished.map(row)}
-            {planned.length > 0 && <Text dimColor>{s.planned} · {planned.length}</Text>}
+            {planned.length > 0 && <Text dimColor>{S.planned} · {planned.length}</Text>}
             {planned.map(pl => {
               const tier = pl.tier in CHARACTER_COLOR ? pl.tier : 'smith'
               return (
@@ -731,7 +712,7 @@ export const registerConstruct = (on: On, opts: Options): void => {
                   <Text dimColor wrap="truncate-end">
                     {'  '}
                     {tierWord(tier)} · {tierModel(tier)}
-                    {pl.after.length ? ` · ${s.after} ${pl.after.join(', ')}` : ''}
+                    {pl.after.length ? ` · ${S.after} ${pl.after.join(', ')}` : ''}
                   </Text>
                 </Box>
               )
@@ -801,11 +782,11 @@ export async function constructSessionStart($: HookArgs<'session.start'>[0], e: 
     description: 'Show or hide the panel of subagents: running, finished and planned, with model, context, cost and time',
   })
 
-  // Ticks the running agents' clocks; quiet when nothing runs.
+  // Ticks the running agents' clocks and the session clock; quiet when nothing runs and the panel is closed.
   $.clock.every(1000, () => {
     void (async () => {
       const list = await read($, agents)
-      if (!list.some(a => a.status === 'running')) return
+      if (!list.some(a => a.status === 'running') && !(await $.ui.panes()).some(p => p.id === PANE)) return
       const at = await $.clock.now()
       await update($, now, () => at)
     })()

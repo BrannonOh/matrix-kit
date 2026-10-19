@@ -63,9 +63,11 @@ export type Metrics = {
   speed: number | null
   ttftMs: number | null
   turnMs: number | null
-  costUsd: number
+  // null until the engine reports a cost (some hosts keep no cost ledger).
+  costUsd: number | null
   turnCostUsd: number | null
-  costAtStart: number
+  // The session cost when the prompt began; null before any prompt, or when none was reported then.
+  costAtStart: number | null
   lastTurn: TokenSplit | null
   session: TokenSplit
   cacheSavingsUsd: number

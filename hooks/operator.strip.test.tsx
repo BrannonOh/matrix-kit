@@ -8,6 +8,7 @@ const BAND = { component: 'AbovePrompt', props: { hasSurvey: false, isWorking: f
 async function oneTurn($: Engine, on: On, rateLimits: unknown[] = []) {
   mock.clock(on)
   on('session.start', async () => ({ cwd: '/repo' }) as never)
+  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000, tokens: 380_000, percent: 38 }, rateLimits, cost: { usd: 0.42 } } }) as never)
   on('session.measure', (_$, e) => ({ changed: e.changed }) as never)
   on('turn.start', () => ({ turnId: 'turn' }) as never)
@@ -64,4 +65,59 @@ test('desktop: the strip icons darken in light mode', async ($, on) => {
   await ui.unmount()
   expect(icons.length > 0).toBe(true)
   for (const icon of icons) expect(icon.includes('prefers-color-scheme: light')).toBe(true)
+})
+
+// A turn where the engine reports no cost and no context figures yet.
+async function bareTurn($: Engine, on: On, cost?: { usd: number }) {
+  mock.clock(on)
+  on('session.start', async () => ({ cwd: '/repo' }) as never)
+  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [], ...(cost ? { cost } : {}) } }) as never)
+  on('turn.start', () => ({ turnId: 'turn' }) as never)
+  on('turn.complete', () => ({ text: '' }) as never)
+  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
+  await ($.turn.start as (e: unknown) => Promise<unknown>)({ turnId: 'turn', text: 'hi' })
+  await ($.turn.complete as (e: unknown) => Promise<unknown>)({ reason: 'answer', answer: 'ok', durationMs: 1000, usage: null })
+}
+
+test('no cost from the engine: both costs read "—", not $0.00', async ($, on) => {
+  await bareTurn($, on)
+  const ui = await strip($)
+  expect(await ui.find({ type: 'Text', text: /^\| —$/ })).toBeDefined()
+  expect(await ui.findAll({ type: 'Text', text: /\$0\.00/ })).toEqual([])
+  await ui.unmount()
+})
+
+test('no context figure yet: the context reads "—", not 0%', async ($, on) => {
+  await bareTurn($, on, { usd: 0.42 })
+  const ui = await strip($)
+  expect(await ui.findAll({ type: 'Text', text: /^0%$/ })).toEqual([])
+  await ui.unmount()
+})
+
+test('the strip formats money like the panel', async ($, on) => {
+  await bareTurn($, on, { usd: 12.34 })
+  const ui = await strip($)
+  expect(await ui.find({ type: 'Text', text: /^\| \$12\.3$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+
+test('no cost at the prompt\'s start: its cost is "—" even once a session cost arrives', async ($, on) => {
+  let cost: { usd: number } | undefined
+  mock.clock(on)
+  on('session.start', async () => ({ cwd: '/repo' }) as never)
+  on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
+  on('tool.register', (_$, e) => ({ value: { tool: e.name } }) as never)
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000, tokens: 1_000, percent: 1 }, rateLimits: [], ...(cost ? { cost } : {}) } }) as never)
+  on('turn.start', () => ({ turnId: 'turn' }) as never)
+  on('turn.complete', () => ({ text: '' }) as never)
+  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
+  await ($.turn.start as (e: unknown) => Promise<unknown>)({ turnId: 'turn', text: 'hi' })
+  cost = { usd: 0.42 }
+  await ($.turn.complete as (e: unknown) => Promise<unknown>)({ reason: 'answer', answer: 'ok', durationMs: 1000, usage: null })
+  const ui = await strip($)
+  expect(await ui.find({ type: 'Text', text: /^\| \$0\.42$/ })).toBeDefined()
+  expect(await ui.findAll({ type: 'Text', text: /^\$\d/ })).toEqual([])
+  await ui.unmount()
 })
