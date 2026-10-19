@@ -209,6 +209,17 @@ export const CHARACTER_COLOR: Record<Character, string> = {
   smith: '#7A8F7E',
 }
 
+// Each accent's light-mode shade: still a green of its own, readable on white (4.5:1 or more).
+export const CHARACTER_LIGHT_COLOR: Record<Character, string> = {
+  neo: PALETTE.lightGreen,
+  morpheus: '#1B5E3B',
+  trinity: '#2E7D61',
+  tank: '#4A7A1A',
+  mouse: '#00756A',
+  oracle: '#6E7A00',
+  smith: '#55665A',
+}
+
 const LETTER: Record<Character, string> = { neo: 'N', morpheus: 'M', trinity: 'T', tank: 'K', mouse: 'm', oracle: 'O', smith: 'S' }
 
 export const badgeOf = (c: Character): { letter: string; color: string } => ({ letter: LETTER[c], color: CHARACTER_COLOR[c] })

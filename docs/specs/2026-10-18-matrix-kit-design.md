@@ -187,7 +187,7 @@ All characters are chibi humans on a 24 × 30 pixel grid, drawn as inline SVG re
   - `#06120A` (dark surface);
   - warn `#E2A94E`, alert `#FF5F56`;
   - done green `#3BFF6E`.
-- **Light mode:** the SVGs use `prefers-color-scheme` inside their own `<style>`, as the originals do. In light mode there's no black fill and the accents darken to `#00802A` so they stay readable on white.
+- **Light mode:** the SVGs use `prefers-color-scheme` inside their own `<style>`, as the originals do. In light mode there's no black fill and the palette greens darken to `#00802A` so they stay readable on white. Each crew member's accent darkens to a light shade of its own (`CHARACTER_LIGHT_COLOR`, each at least 4.5:1 on white), so the crew stays tellable apart.
 - **Font:** `ui-monospace, 'Cascadia Mono', Consolas, monospace` (Cascadia ships with Windows 11).
 - **Copy:** themed but clear, e.g. "Crew", "Planned", "Done", tooltip "Wake up — cache expires in 5 min". Every number keeps a plain label.
 

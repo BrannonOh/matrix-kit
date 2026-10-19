@@ -167,3 +167,10 @@ test('the session clock stays still while The Construct is closed and nothing ru
   expect(await ui.find({ type: 'Text', text: /^Session 0:00$/ })).toBeDefined()
   await ui.unmount()
 })
+
+test('desktop: in light mode Morpheus darkens to a green of his own, not the shared one', async ($, on) => {
+  await worker($, on, 'matrix-kit:morpheus')
+  const source = await desktopSources($)
+  const light = /\[fill="#2E8B57"\]\{fill:(#[0-9A-Fa-f]{6})\}/.exec(source)?.[1]
+  expect(light === undefined || light.toUpperCase() === '#00802A').toBe(false)
+})

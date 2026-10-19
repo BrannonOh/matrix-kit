@@ -31,12 +31,15 @@ export const themeCss = (): string => `<style>
 @media (prefers-color-scheme: light){.t{fill:#1F2A22}.m{fill:#5A7A62}.k{fill:#E6ECE7}.tk{fill:#B9C9BD}.acc{fill:${PALETTE.lightGreen}}.dn{fill:${PALETTE.lightGreen}}.pt{fill:#FFFFFF}}
 </style>`
 
-// For drawings that colour with attributes: in light mode each of `greens` darkens to the light-mode green.
-export const lightGreensCss = (greens: readonly string[]): string => {
-  const list = [...new Set(greens)]
-  return `<style>@media (prefers-color-scheme: light){${list.map(g => `[fill="${g}"]`).join(',')}{fill:${PALETTE.lightGreen}}${list.map(g => `[stroke="${g}"]`).join(',')}{stroke:${PALETTE.lightGreen}}}</style>`
-}
+// For drawings that colour with attributes: in light mode each green (a key) darkens to its readable shade (the value).
+export const lightGreensCss = (shades: Readonly<Record<string, string>>): string =>
+  `<style>@media (prefers-color-scheme: light){${Object.entries(shades)
+    .map(([dark, light]) => `[fill="${dark}"]{fill:${light}}[stroke="${dark}"]{stroke:${light}}`)
+    .join('')}}</style>`
 
-export const GREENS = [PALETTE.green, PALETTE.done, PALETTE.green2]
+// The palette's bright greens all darken to the one light-mode green.
+export const LIGHT_GREENS: Readonly<Record<string, string>> = Object.fromEntries(
+  [PALETTE.green, PALETTE.done, PALETTE.green2].map(g => [g, PALETTE.lightGreen]),
+)
 // The strip's icons.
-export const LIGHT_ACCENTS_CSS = lightGreensCss(GREENS)
+export const LIGHT_ACCENTS_CSS = lightGreensCss(LIGHT_GREENS)

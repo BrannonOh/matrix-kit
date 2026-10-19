@@ -7,8 +7,8 @@ import { clip, fitText, fmtCost, fmtDuration, fmtTime, fmtTokens, modelName, tex
 import { emptyMetrics, hitRate } from './lib/metrics.ts'
 import type { Metrics } from './lib/metrics.ts'
 import { costOf, windowOf } from './lib/prices.ts'
-import { GREENS, MONO_FONT, PALETTE, glyphAt, lightGreensCss, noise, themeCss } from './lib/theme.ts'
-import { CHARACTER_COLOR, SPRITE_CSS, badgeOf, spriteSvg } from './lib/sprites.ts'
+import { LIGHT_GREENS, MONO_FONT, PALETTE, glyphAt, lightGreensCss, noise, themeCss } from './lib/theme.ts'
+import { CHARACTER_COLOR, CHARACTER_LIGHT_COLOR, SPRITE_CSS, badgeOf, spriteSvg } from './lib/sprites.ts'
 import { CHARACTER_NAME, TIER_MODEL, TIERS, characterOf, isCrew } from './lib/crew.ts'
 import type { Character, Tier } from './lib/crew.ts'
 
@@ -276,7 +276,10 @@ const PANE_CSS = `<style>
 @media (prefers-color-scheme: light){.t{fill:#1F2A22}.s{fill:#4F6B57}.m{fill:#7A947F}.k{fill:#E6ECE7}.ln{stroke:#D5E0D7}.tile{fill:#EEF3EF}}
 .live{animation:p 1.6s ease-in-out infinite}@keyframes p{50%{opacity:.3}}
 @media (prefers-reduced-motion: reduce){.live{animation:none}}
-</style>${lightGreensCss([...GREENS, ...Object.values(CHARACTER_COLOR)])}`
+</style>${lightGreensCss({
+  ...LIGHT_GREENS,
+  ...Object.fromEntries(Object.entries(CHARACTER_COLOR).map(([c, dark]) => [dark, CHARACTER_LIGHT_COLOR[c as Character]])),
+})}`
 
 const statusMark = (x: number, y: number, status: string, color: string): string => {
   if (status === 'running') return `<circle class="live" cx="${x}" cy="${y}" r="3.5" fill="${color}"/>`
