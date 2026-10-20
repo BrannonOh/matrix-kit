@@ -1,17 +1,10 @@
 {
   "name": "matrix-kit",
   "version": "0.1.0",
-  "description": "The Matrix for Claude Code: /red-pill orchestrated flow with Neo, Morpheus, Trinity, Tank and Mouse as workers, a code-rain progress bar, The Construct panel and an operator metrics strip.",
-  "author": { "name": "Brannon Oh" },
+  "description": "The Matrix for Claude Code: a code-rain progress bar that follows the session's task list, The Construct panel with every subagent played by a Matrix character, and an operator metrics strip.",
+  "author": {
+    "name": "Brannon Oh"
+  },
   "license": "MIT",
-  "types": "./types/index.d.ts",
-  "userConfig": {
-    "autoOpen": {
-      "type": "string",
-      "title": "Open The Construct",
-      "description": "crew: when a matrix-kit worker starts or a plan is reported; any: also when any other subagent starts",
-      "default": "crew",
-      "options": ["crew", "any"]
-    }
-  }
+  "types": "./types/index.d.ts"
 }

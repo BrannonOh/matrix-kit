@@ -1,6 +1,4 @@
-import type { EventName, Hook, HookStream, Register, RenderInput } from 'claude-code'
-
-export type Options = Parameters<Register>[1]
+import type { EventName, Hook, HookStream, RenderInput } from 'claude-code'
 
 // A hook shared between construct.tsx and operator.tsx is a function declaration
 // typed by these, which register.tsx chains: the engine follows `$` across an

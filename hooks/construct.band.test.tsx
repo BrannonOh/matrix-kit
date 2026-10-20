@@ -6,9 +6,18 @@ import { startSession } from './testing.ts'
 
 const BAND = { component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 100 } as never } as const
 
+// A task list of four, one done and "Ship it" in progress.
 async function session($: Engine, on: On) {
+  on('tool.call', { tool: 'mcp__ccd_turn__update_plan' }, () => ({ result: 'ok' }) as never)
+  on('tool.call', { tool: 'mcp__ccd_turn__wrap_up' }, () => ({ result: 'ok' }) as never)
   await startSession($, on, { now: Date.parse('2026-10-10T02:00:00Z') })
-  await $.tool.call({ tool: 'mcp__matrix-kit__progress', title: 'Ship it', total: 4, done: 1, phase: 'delegate' } as never)
+  const items = [
+    { content: 'Plan it', status: 'completed' },
+    { content: 'Ship it', status: 'in_progress' },
+    { content: 'Test it', status: 'pending' },
+    { content: 'Tell them', status: 'pending' },
+  ]
+  await $.tool.call({ tool: 'mcp__ccd_turn__update_plan', items, scope: 'first_task' } as never)
 }
 
 async function band($: Engine, surface: 'terminal' | 'desktop') {
@@ -45,9 +54,9 @@ test('desktop: the bar fills with green code-rain glyphs, not dots', async ($, o
   expect(source.includes('<rect class="t')).toBe(false)
 })
 
-test('desktop: a finished flow glows in the done green', async ($, on) => {
+test('desktop: a finished list glows in the done green', async ($, on) => {
   await session($, on)
-  await $.tool.call({ tool: 'mcp__matrix-kit__progress', finished: true } as never)
+  await $.tool.call({ tool: 'mcp__ccd_turn__wrap_up', recap: 'Done.' } as never)
   expect((await bandSource($)).includes('#3BFF6E')).toBe(true)
 })
 

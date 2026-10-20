@@ -1,20 +1,7 @@
-export type Phase = 'plan' | 'design' | 'delegate' | 'review' | 'close'
-
-export type PlannedTask = {
-  title: string
-  tier: string
-  after: number[]
-}
-
-export type Flow = {
-  title: string
-  total: number
-  done: number
-  running: number
-  phase: Phase
-  isFinished: boolean
-  tasks: PlannedTask[]
-}
+export type StepStatus = 'pending' | 'in_progress' | 'completed'
+export type Step = { id: string; content: string; status: StepStatus }
+/** The session's task list, mirrored for the band (hooks/lib/plan.ts). */
+export type Plan = { steps: Step[] }
 
 export type AgentStatus = 'running' | 'done' | 'failed'
 
@@ -34,7 +21,7 @@ export type AgentRun = {
   costUsd: number
   steps: number
   round: number
-  /** Self-reported by the worker through the `step` tool. */
+  /** Self-reported by the subagent through the `step` tool. */
   stepDone?: number
   stepTotal?: number
   stepNote?: string
@@ -43,7 +30,8 @@ export type AgentRun = {
 export type Panel = {
   isCompact: boolean
   isDoneCollapsed: boolean
-  autoOpenedFor: string
+  /** Opened by itself this prompt: it opens once per prompt. */
+  isAutoOpened: boolean
 }
 
 export type Cache = {
@@ -82,7 +70,7 @@ export type Metrics = {
 declare module 'claude-code' {
   interface PluginState {
     'matrix-kit': {
-      flow: Flow | null
+      plan: Plan | null
       agents: AgentRun[]
       panel: Panel
       now: number

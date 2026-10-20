@@ -1,83 +1,113 @@
+import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 
 const PLUGIN = 'matrix-kit'
-const PROGRESS = 'mcp__matrix-kit__progress'
+const PLAN = 'mcp__ccd_turn__update_plan' as const
 
 const band = { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 100, scroll: { offset: 0, bodyRows: 4 }, view: {} }
-const pane = { title: '', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} } as const
 
-const plan = {
-  tool: PROGRESS,
-  title: 'Ship the thing',
-  phase: 'delegate',
-  tasks: [
-    { title: 'Write the parser', tier: 'trinity' },
-    { title: 'Wire the CLI', tier: 'mouse', after: [1] },
-  ],
-} as const
+const steps = [
+  { content: 'Write the parser', status: 'in_progress' },
+  { content: 'Wire the CLI', status: 'pending' },
+]
 
-for (const surface of ['terminal', 'desktop'] as const) {
-  test(`${surface}: the band shows what the flow reports`, async ($, on) => {
-    // Reporting a plan opens the panel by itself, once per flow.
-    const opened: string[] = []
-    on('ui.open', (_$, e) => {
-      opened.push(e.id)
-      return { value: { isPlaced: true } }
-    })
-
-    const reported = await $.tool.call(plan as never)
-    expect(reported).toMatchObject({ result: 'ok: Tasks 0/2' })
-
-    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: band })
-    // Two planned tasks, none started: the crew button counts both.
-    expect((await ui.find({ key: 'matrix-construct' }))?.props.label).toBe('×2')
-
-    await $.tool.call({ tool: PROGRESS, done: 1 } as never)
-    expect(opened).toEqual(['matrix-construct'])
-    expect(await $.tool.call({ tool: PROGRESS, finished: true } as never)).toMatchObject({ result: 'ok: Done' })
-  })
-
-  // The schema's enum and bounds are advice to the model: a call outside them must still draw.
-  test(`${surface}: input outside the tool's schema cannot break the drawing`, async ($, on) => {
-    mock.clock(on)
-    on('ui.open', () => ({ value: { isPlaced: true } }))
-    const tasks = [
-      { title: 'Odd one', tier: '__proto__' },
-      { title: 'Odd two', tier: 'constructor' },
-      ...Array.from({ length: 500 }, (_, i) => ({ title: `Task ${i}`, tier: 'mouse' })),
-    ]
-    const reported = await $.tool.call({ tool: PROGRESS, title: 'Odd input', phase: 'delegate', tasks, total: 1e9 } as never)
-    expect(reported).toMatchObject({ result: 'ok: Tasks 0/200' })
-
-    const bar = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: band })
-    expect((await bar.find({ key: 'matrix-construct' }))?.props.label).toBe('×200')
-
-    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: 'matrix-construct', props: pane })
-    expect(await ui.find({ text: /Planned · 200/ })).toBeDefined()
-    const drawn = (await ui.findAll({ type: 'Svg' })).map(el => String(el.props.source)).join('')
-    expect(drawn).not.toContain('native code')
-    expect(drawn).not.toContain('[object')
-  })
-
-  // The stored title is clipped, so the incoming one is clipped before the two are compared.
-  test(`${surface}: a title past the cap is still the same flow`, async ($, on) => {
-    on('ui.open', () => ({ value: { isPlaced: true } }))
-    const long = 'L'.repeat(500)
-
-    const first = await $.tool.call({ tool: PROGRESS, title: long, phase: 'delegate', total: 4, done: 2 } as never)
-    expect(first).toMatchObject({ result: 'ok: Tasks 2/4' })
-
-    // Repeating the long title keeps the counters instead of starting over at 0/0.
-    expect(await $.tool.call({ tool: PROGRESS, title: long } as never)).toMatchObject({ result: 'ok: Tasks 2/4' })
-
-    const started = await $.tool.call({ tool: PROGRESS, title: 'Another flow', phase: 'delegate', total: 3 } as never)
-    expect(started).toMatchObject({ result: 'ok: Tasks 0/3' })
-  })
+// The engine beneath: every task-list tool answers; TaskCreate hands back ids in order.
+// With no list, the band draws only what is beneath it.
+function answerTools(on: On) {
+  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'engine', ref: 0 }) as never)
+  let id = 0
+  on('tool.call', { tool: PLAN }, () => ({ result: 'ok' }) as never)
+  on('tool.call', { tool: 'mcp__ccd_turn__wrap_up' }, () => ({ result: 'ok' }) as never)
+  on('tool.call', { tool: 'TodoWrite' }, () => ({ result: 'ok' }) as never)
+  on('tool.call', { tool: 'TaskUpdate' }, () => ({ result: 'ok' }) as never)
+  on('tool.call', { tool: 'TaskCreate' }, () => ({ result: { task: { id: String(++id), subject: '' } } }) as never)
 }
 
-// A crew worker is told to report its steps and brings the panel up; any other agent is left as it came.
-for (const [subagentType, isBriefed] of [['matrix-kit:trinity', true], ['savvy-careful', false]] as const) {
-  test(`spawn: ${subagentType} ${isBriefed ? 'is' : 'is not'} briefed to report steps`, async ($, on) => {
+// The band's words in the terminal: title, count, or nothing when it is not drawn.
+async function bandText($: Engine): Promise<string> {
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: band })
+  const shown = (await ui.findAll({ type: 'Text' })).map(t => String(t.props.children ?? t.text ?? '')).join(' ')
+  const hasRow = (await ui.find({ key: 'matrix-construct' })) !== undefined
+  await ui.unmount()
+  return hasRow ? shown : ''
+}
+
+async function label($: Engine): Promise<string | undefined> {
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: band })
+  const found = await ui.find({ type: 'Text', text: /^(Tasks \d+\/\d+|Done)$/ })
+  await ui.unmount()
+  return found?.text
+}
+
+const startPrompt = ($: Engine) => ($.turn.start as (e: unknown) => Promise<unknown>)({ turnId: 'turn', text: 'next' })
+
+test("the band follows the desktop app's task list, step by step", async ($, on) => {
+  answerTools(on)
+  expect(await label($)).toBe(undefined)
+
+  await $.tool.call({ tool: PLAN, items: steps, scope: 'first_task' } as never)
+  expect(await label($)).toBe('Tasks 0/2')
+  expect(await bandText($)).toContain('Write the parser')
+
+  await $.tool.call({ tool: PLAN, advance: true } as never)
+  expect(await label($)).toBe('Tasks 1/2')
+  expect(await bandText($)).toContain('Wire the CLI')
+
+  // wrap_up checks the list off.
+  await $.tool.call({ tool: 'mcp__ccd_turn__wrap_up', recap: 'Done.' } as never)
+  expect(await label($)).toBe('Done')
+})
+
+test('a finished list stays until the next prompt, then the band hides', async ($, on) => {
+  answerTools(on)
+  on('turn.start', () => ({ turnId: 'turn' }) as never)
+  await $.tool.call({ tool: PLAN, items: steps, scope: 'first_task' } as never)
+
+  // An unfinished list carries over into the next prompt.
+  await startPrompt($)
+  expect(await label($)).toBe('Tasks 0/2')
+
+  await $.tool.call({ tool: 'mcp__ccd_turn__wrap_up', recap: 'Done.' } as never)
+  expect(await label($)).toBe('Done')
+  await startPrompt($)
+  expect(await label($)).toBe(undefined)
+})
+
+test("a subagent's task list is its own, not the session's", async ($, on) => {
+  answerTools(on)
+  await $.tool.call({ tool: PLAN, items: steps, scope: 'first_task' } as never)
+  await $.tool.call({ tool: PLAN, agentId: 'a1', items: [{ content: 'Hijacked', status: 'completed' }] } as never)
+  await $.tool.call({ tool: 'TodoWrite', agentId: 'a1', todos: [{ content: 'Hijacked', status: 'completed', activeForm: 'x' }] } as never)
+  expect(await label($)).toBe('Tasks 0/2')
+  expect(await bandText($)).not.toContain('Hijacked')
+})
+
+test("the CLI's TodoWrite and TaskCreate / TaskUpdate drive the band too", async ($, on) => {
+  answerTools(on)
+  await $.tool.call({ tool: 'TodoWrite', todos: [{ content: 'Profile it', status: 'completed', activeForm: 'Profiling' }, { content: 'Cache it', status: 'in_progress', activeForm: 'Caching' }] } as never)
+  expect(await label($)).toBe('Tasks 1/2')
+
+  await $.tool.call({ tool: 'TodoWrite', todos: [{ content: 'Profile it', status: 'completed', activeForm: 'Profiling' }, { content: 'Cache it', status: 'completed', activeForm: 'Caching' }] } as never)
+  expect(await label($)).toBe('Done')
+
+  // A task created after a finished list starts a new one.
+  await $.tool.call({ tool: 'TaskCreate', subject: 'Find the leak', description: '' } as never)
+  await $.tool.call({ tool: 'TaskCreate', subject: 'Patch it', description: '' } as never)
+  await $.tool.call({ tool: 'TaskUpdate', taskId: '1', status: 'completed' } as never)
+  expect(await label($)).toBe('Tasks 1/2')
+})
+
+test('an errored task-list call changes nothing', async ($, on) => {
+  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'engine', ref: 0 }) as never)
+  on('tool.call', { tool: PLAN }, () => ({ result: 'bad input', isError: true }) as never)
+  await $.tool.call({ tool: PLAN, items: steps, scope: 'first_task' } as never)
+  expect(await label($)).toBe(undefined)
+})
+
+// Every subagent but Explore is told to report its steps; any subagent brings the panel up, once per prompt.
+for (const [subagentType, isBriefed] of [['general-purpose', true], ['savvy-careful', true], ['Explore', false]] as const) {
+  test(`spawn: ${subagentType} ${isBriefed ? 'is' : 'is not'} briefed to report steps, and opens The Construct`, async ($, on) => {
     mock.clock(on)
     const opened: string[] = []
     on('ui.open', (_$, e) => {
@@ -92,6 +122,32 @@ for (const [subagentType, isBriefed] of [['matrix-kit:trinity', true], ['savvy-c
     await $.agent.spawn({ tool_use_id: 't1', prompt: 'Fix the parser', description: 'Fix it', subagentType, provider: 'engine', parentModel: 'claude-opus-5-5', background: false, fork: false } as never)
 
     expect(prompt.includes('mcp__matrix-kit__step')).toBe(isBriefed)
-    expect(opened.length).toBe(isBriefed ? 1 : 0)
+    expect(opened).toEqual(['matrix-construct'])
   })
 }
+
+test('The Construct opens by itself once per prompt', async ($, on) => {
+  mock.clock(on)
+  on('turn.start', () => ({ turnId: 'turn' }) as never)
+  let opened = 0
+  on('ui.open', () => {
+    opened++
+    return { value: { isPlaced: true } }
+  })
+  let n = 0
+  on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: `a${++n}` }) as never)
+  const spawn = () =>
+    $.agent.spawn({ tool_use_id: `t${n}`, prompt: 'p', description: `Job ${n}`, subagentType: 'general-purpose', provider: 'engine', parentModel: 'claude-opus-5-5', background: false, fork: false } as never)
+
+  await spawn()
+  await spawn()
+  expect(opened).toBe(1)
+  // A subagent's own turn is not a new prompt.
+  await ($.turn.start as (e: unknown) => Promise<unknown>)({ turnId: 'sub', agentId: 'a1', text: '' })
+  await spawn()
+  expect(opened).toBe(1)
+
+  await startPrompt($)
+  await spawn()
+  expect(opened).toBe(2)
+})

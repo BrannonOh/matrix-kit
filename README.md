@@ -4,9 +4,8 @@ A Claude Code plugin in the style of The Matrix. It's a re-themed and extended c
 
 It adds:
 
-- **`/red-pill <task>`**, an orchestrated workflow. The main session plans the work, hands each piece to a worker, and reviews what comes back. It asks before running `git init` and before every commit.
-- **A progress bar** above the prompt that fills with falling green code. Mouse runs at the end of the bar while any worker is busy.
-- **The Construct** (`/construct`, `/construct open`), a panel with session metrics at the top and the crew below. Each crew member is animated while working, glitches if it fails, and is dimmed while only planned.
+- **A progress bar** above the prompt that follows the session's task list and fills with falling green code as steps are done. Mouse runs at the end of the bar while any subagent is busy.
+- **The Construct** (`/construct`, `/construct open`), a panel with session metrics at the top and every subagent below. It opens by itself when a subagent starts, once per prompt. Each subagent is animated while working and glitches if it fails.
 - **The operator strip** (`/operator`), a row of metrics above the prompt:
   - tok/s;
   - cost of the last prompt and of the session;
@@ -18,19 +17,23 @@ It adds:
 
   Items drop off as the window narrows. `/operator demo <minutes>` previews the cache warning, and `/operator json` prints every collected figure.
 
-## The crew
+## The progress bar
 
-| Character | Agent | Model / effort | Takes |
-| --- | --- | --- | --- |
-| Neo | `neo` | Fable / high | the hardest logic and bugs |
-| Morpheus | `morpheus` | Opus / xhigh | unfamiliar code, unclear root causes |
-| Trinity | `trinity` | Opus / high | delicate but well-understood changes |
-| Tank | `tank` | Opus / medium | standard feature work |
-| Mouse | `mouse` | Opus / low | mechanical edits, builds, tests |
-| The Oracle | (any Explore agent) | — | searching the code |
-| Agent Smith | (any other agent) | — | everything else |
+The bar mirrors the task list the main session keeps: the desktop app's task list, or TodoWrite and TaskCreate / TaskUpdate in the terminal. It shows the step in progress and `Tasks 2/5`, then `Done`. A finished list stays until your next prompt, and `✕` hides it at once. A subagent's own list doesn't move it.
 
-**No Fable access?** Change `model: fable` to `model: opus` in `agents/neo.md`. Otherwise every task given to Neo fails, and shows the glitch.
+## The characters
+
+Each subagent is played by a character chosen by its model, at any effort:
+
+| Model | Character |
+| --- | --- |
+| Fable | Neo |
+| Opus | Morpheus |
+| Sonnet | Trinity |
+| Haiku | The Oracle |
+| not known yet, or any other | Agent Smith |
+
+Every subagent except Explore is asked to report its steps, so its row shows a step bar. Explore rows show context fill in grey.
 
 ## Install
 
@@ -48,7 +51,25 @@ To load it in every session, desktop app included, add the folder to the `env` b
 
 `CLAUDE_CODE_PLUGIN_DIR_WATCH` reloads the plugin when its files change.
 
-**Setting:** `autoOpen` is `crew` (the default) or `any`. With `crew`, The Construct opens when a crew worker starts or a plan is reported. With `any`, it also opens for any other subagent.
+## Metrics
+
+The Construct shows these tiles above the subagents. They update on turn events, and the clocks tick each second while The Construct is open. Costs and savings are estimates from `hooks/lib/prices.ts`.
+
+| Tile | What it shows |
+| --- | --- |
+| Crew cost | The estimated cost of all subagents run this session. |
+| Crew tokens | The tokens used by all subagents this session. |
+| Crew time | The time from the first subagent's start to the last one's end, or to now while one runs. |
+| First token | How long the main thread waited for the first reply in the last turn. |
+| Turn | How long the last main-thread turn took. |
+| Tokens | The last main-thread turn's input, output, cache-read and cache-write tokens. |
+| Cache hit | The share of the last turn's prompt that was read from the cache. |
+| Saved | How much the cache saved this session, main thread and subagents together. |
+| Tools | The tool calls made this session. Errors are counted next to the total, and the tile turns red when there are any. |
+| Worker lines | The lines added and removed by subagents this session; your own edits are not counted. |
+| Running | How many subagents are running now. |
+| Session | How long this session has been open, counted from when it started rather than from the first prompt. |
+| Prompts | How many prompts you have sent this session. |
 
 ## Develop
 
@@ -64,7 +85,7 @@ The check is a typecheck, the strict validator and the full test suite:
 npm run check
 ```
 
-The typecheck needs `.claude-plugin/types/`, which Claude Code writes when it loads the mod. The design is in `docs/specs/`, the build plan in `docs/plans/`, and the review rules in `CODING_STANDARDS.md`.
+The typecheck needs `.claude-plugin/types/`, which Claude Code writes when it loads the mod. The design is in `docs/specs/` (`2026-10-20-no-red-pill.md` replaces the red-pill parts of the first spec), the build plan in `docs/plans/`, and the review rules in `CODING_STANDARDS.md`.
 
 **Two rules the validator enforces:**
 

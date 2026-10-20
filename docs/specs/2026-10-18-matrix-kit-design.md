@@ -2,6 +2,8 @@
 
 Date: 2026-10-18 · Status: awaiting review · Owner: Brannon Oh
 
+> **Superseded in part (2026-10-20):** `/red-pill`, the crew agents, the `progress` tool, planned rows and `autoOpen` were removed. The bar now follows the session's task list, and characters come from the model. See [2026-10-20-no-red-pill.md](2026-10-20-no-red-pill.md).
+
 ## 1. Goal
 
 A personal Claude Code plugin, `matrix-kit`, that does everything [claude-kit](https://github.com/JohnnyVizz/claude-kit) does, re-themed as The Matrix and extended with more session metrics and chibi Matrix characters as the subagent workers.

@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderChildren } from 'claude-code'
-import type { AbovePromptInput, HookArgs, Options, Then } from './lib/shared.ts'
+import type { AbovePromptInput, HookArgs, Then } from './lib/shared.ts'
 
 import type { Cache } from '../types/index.d.ts'
 import { fmtCost, fmtTokens, modelName } from './lib/format.ts'
@@ -155,17 +155,7 @@ export const registerOperator = (on: On): void => {
     return { text: hidden ? 'Operator strip hidden.' : 'Operator strip shown.' }
   })
 
-  // Subagents raise turn.start too: only the main loop's starts a prompt.
-  on('turn.start', async ($, e, next) => {
-    if (e.agentId !== undefined) return next(e)
-    const total = (await $.session.usage()).cost?.usd ?? null
-    await update($, metrics, m => ({ ...m, turn: m.turn + 1, costAtStart: total, costUsd: total ?? m.costUsd, tools: { ...m.tools, turn: 0, turnErrors: 0 }, ttftMs: null, turnMs: null }))
-    await update($, isBusy, () => true)
-
-    return next(e)
-  })
-
-  // Every tool call of the session, workers' included; an Agent call also brings its lines changed.
+  // Every tool call of the session, subagents' included; an Agent call also brings its lines changed.
   on('tool.call', async ($, e, next) => {
     const result = await next(e)
     const isError = result.isError === true
@@ -195,6 +185,16 @@ export const registerOperator = (on: On): void => {
     return next(e)
   })
 
+}
+
+// Subagents raise turn.start too: only the main loop's starts a prompt.
+export async function operatorTurnStart($: HookArgs<'turn.start'>[0], e: HookArgs<'turn.start'>[1], next: Then<'turn.start'>) {
+  if (e.agentId !== undefined) return next(e)
+  const total = (await $.session.usage()).cost?.usd ?? null
+  await update($, metrics, m => ({ ...m, turn: m.turn + 1, costAtStart: total, costUsd: total ?? m.costUsd, tools: { ...m.tools, turn: 0, turnErrors: 0 }, ttftMs: null, turnMs: null }))
+  await update($, isBusy, () => true)
+
+  return next(e)
 }
 
 export async function operatorSessionStart($: HookArgs<'session.start'>[0], e: HookArgs<'session.start'>[1], next: Then<'session.start'>) {

@@ -8,11 +8,11 @@ const PLUGIN = 'matrix-kit'
 const PANE = 'matrix-construct'
 const pane = { title: '', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} } as const
 
-// One running worker of `subagentType`, known to the panel.
-const worker = async ($: Engine, on: On, subagentType: string) => {
+// One running subagent on `model`, known to the panel; the character comes from the model.
+const worker = async ($: Engine, on: On, model: string, subagentType = 'general-purpose') => {
   mock.clock(on)
   on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: 'a1' }) as never)
+  on('agent.spawn', () => ({ model, agentId: 'a1' }) as never)
   on('turn.complete', () => ({ text: '' }) as never)
   await $.agent.spawn({ tool_use_id: 't1', prompt: 'p', description: 'Fix the parser', subagentType, provider: 'engine', parentModel: 'claude-opus-5-5', background: false, fork: false } as never)
 }
@@ -31,28 +31,38 @@ const terminalShows = async ($: Engine, text: RegExp): Promise<boolean> => {
   return found !== undefined && found !== null
 }
 
-test('desktop: a running Neo is drawn as the Neo sprite at work', async ($, on) => {
-  await worker($, on, 'matrix-kit:neo')
+test('desktop: a running Fable agent is drawn as the Neo sprite at work', async ($, on) => {
+  await worker($, on, 'claude-fable-5-1')
   const source = await desktopSources($)
   expect(source.includes('ch-neo')).toBe(true)
   expect(source.includes('st-running')).toBe(true)
 })
 
-test('terminal: a running Neo shows his badge letter, his name and the task', async ($, on) => {
-  await worker($, on, 'matrix-kit:neo')
+test("terminal: a running Fable agent shows Neo's badge letter, his name and the task", async ($, on) => {
+  await worker($, on, 'claude-fable-5-1')
   expect(await terminalShows($, /^N$/)).toBe(true)
   expect(await terminalShows($, /Neo/)).toBe(true)
   expect(await terminalShows($, /Fix the parser/)).toBe(true)
 })
 
-test('terminal: an Explore agent is played by The Oracle', async ($, on) => {
-  await worker($, on, 'Explore')
+test('terminal: an agent on Haiku is played by The Oracle', async ($, on) => {
+  await worker($, on, 'claude-haiku-5-5', 'Explore')
   expect(await terminalShows($, /The Oracle/)).toBe(true)
 })
 
-// Review Focus 5: Neo without Fable access ends in an error; the row must not stay running.
-test('a worker whose turn ends in an error shows as failed', async ($, on) => {
-  await worker($, on, 'matrix-kit:neo')
+test('terminal: a Sonnet Explore agent is Trinity, not The Oracle', async ($, on) => {
+  await worker($, on, 'claude-sonnet-5-5', 'Explore')
+  expect(await terminalShows($, /Trinity/)).toBe(true)
+  expect(await terminalShows($, /The Oracle/)).toBe(false)
+})
+
+test('terminal: an agent whose model is not known yet is Agent Smith', async ($, on) => {
+  await worker($, on, '')
+  expect(await terminalShows($, /Agent Smith/)).toBe(true)
+})
+
+test('a subagent whose turn ends in an error shows as failed', async ($, on) => {
+  await worker($, on, 'claude-fable-5-1')
   await ($.turn.complete as (e: unknown) => Promise<unknown>)({ agentId: 'a1', reason: 'error', answer: '', usage: null })
   expect((await desktopSources($)).includes('st-failed')).toBe(true)
   expect(await terminalShows($, /✗/)).toBe(true)
@@ -133,7 +143,7 @@ test('terminal: lines changed are labelled as the workers\' own', async ($, on) 
 })
 
 test('desktop: the panel darkens its greens in light mode', async ($, on) => {
-  await worker($, on, 'matrix-kit:neo')
+  await worker($, on, 'claude-fable-5-1')
   const source = await desktopSources($)
   expect(/prefers-color-scheme: light\)\{[^}]*\[fill="#00FF41"\]/.test(source)).toBe(true)
 })
@@ -158,7 +168,7 @@ test('the session clock stays still while The Construct is closed and nothing ru
 })
 
 test('desktop: in light mode Morpheus darkens to a green of his own, not the shared one', async ($, on) => {
-  await worker($, on, 'matrix-kit:morpheus')
+  await worker($, on, 'claude-opus-5-5')
   const source = await desktopSources($)
   const light = /\[fill="#2E8B57"\]\{fill:(#[0-9A-Fa-f]{6})\}/.exec(source)?.[1]
   expect(light === undefined || light.toUpperCase() === '#00802A').toBe(false)

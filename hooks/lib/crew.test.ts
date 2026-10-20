@@ -1,22 +1,21 @@
 import { expect, test } from 'claude-code/testing'
 
-import { CHARACTER_NAME, characterOf, isCrew } from './crew.ts'
+import { CHARACTER_NAME, characterOf } from './crew.ts'
 
-test('characterOf: a crew agent plays itself, with or without the plugin prefix', () => {
-  expect(characterOf('matrix-kit:neo')).toBe('neo')
-  expect(characterOf('mouse')).toBe('mouse')
+test('characterOf: each model family plays one character, at any effort', () => {
+  expect(characterOf('claude-fable-5-1')).toBe('neo')
+  expect(characterOf('claude-opus-5-5')).toBe('morpheus')
+  expect(characterOf('claude-sonnet-5-5')).toBe('trinity')
+  expect(characterOf('claude-haiku-5-5')).toBe('oracle')
+  // Aliases and provider-prefixed ids name the family too.
+  expect(characterOf('opus')).toBe('morpheus')
+  expect(characterOf('us.anthropic.claude-sonnet-5-5-v1:0')).toBe('trinity')
 })
 
-test('characterOf: Explore is The Oracle and anything else is Agent Smith', () => {
-  expect(characterOf('Explore')).toBe('oracle')
-  expect(characterOf('general-purpose')).toBe('smith')
-  expect(characterOf('matrix-kit:unknown')).toBe('smith')
-})
-
-test('isCrew: only the five matrix-kit workers', () => {
-  expect(isCrew('matrix-kit:trinity')).toBe(true)
-  expect(isCrew('savvy-careful')).toBe(false)
-  expect(isCrew('Explore')).toBe(false)
+test('characterOf: no model yet, or one outside the four families, is Agent Smith', () => {
+  expect(characterOf('')).toBe('smith')
+  expect(characterOf(undefined)).toBe('smith')
+  expect(characterOf('gpt-9')).toBe('smith')
 })
 
 test('CHARACTER_NAME: display names', () => {

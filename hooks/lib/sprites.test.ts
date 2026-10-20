@@ -1,10 +1,10 @@
 import { expect, test } from 'claude-code/testing'
 
-import type { Character } from './crew.ts'
 import { CHARACTER_COLOR, CHARACTER_LIGHT_COLOR, SPRITE_CSS, badgeOf, spriteSvg } from './sprites.ts'
+import type { Sprite } from './sprites.ts'
 
-const CHARACTERS: readonly Character[] = ['neo', 'morpheus', 'trinity', 'tank', 'mouse', 'oracle', 'smith']
-const STATES = ['running', 'done', 'failed', 'planned'] as const
+const CHARACTERS: readonly Sprite[] = ['neo', 'morpheus', 'trinity', 'mouse', 'oracle', 'smith']
+const STATES = ['running', 'done', 'failed'] as const
 
 const rgb = (hex: string): [number, number, number] => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)]
 
@@ -19,7 +19,7 @@ for (const c of CHARACTERS) {
   }
 }
 
-test('sprite: a row of all seven running fits one Svg source', () => {
+test('sprite: a row of all six running fits one Svg source', () => {
   const body = CHARACTERS.map((c, i) => spriteSvg(c, 'running', { x: i * 30, y: 0 })).join('')
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="40">${SPRITE_CSS}${body}</svg>`
   expect(svg.length).toBeLessThan(131_072)
@@ -29,15 +29,14 @@ test('sprite: every animation stops under reduced motion', () => {
   expect(SPRITE_CSS.includes('prefers-reduced-motion')).toBe(true)
 })
 
-test('sprite: a failed worker glitches and a planned one is dimmed', () => {
+test('sprite: a failed worker glitches', () => {
   expect(spriteSvg('neo', 'failed', { x: 0, y: 0 }).includes('glitch')).toBe(true)
-  expect(spriteSvg('neo', 'planned', { x: 0, y: 0 }).includes('opacity="0.45"')).toBe(true)
 })
 
-test('badgeOf: seven different letters for the terminal', () => {
+test('badgeOf: six different letters for the terminal', () => {
   const letters = CHARACTERS.map(c => badgeOf(c).letter)
-  expect(new Set(letters).size).toBe(7)
-  expect(letters).toEqual(['N', 'M', 'T', 'K', 'm', 'O', 'S'])
+  expect(new Set(letters).size).toBe(6)
+  expect(letters).toEqual(['N', 'M', 'T', 'm', 'O', 'S'])
 })
 
 test('CHARACTER_COLOR: every badge is a shade of green', () => {
@@ -54,9 +53,9 @@ const contrastOnWhite = (hex: string): number => {
   return 1.05 / (0.2126 * lin(r / 255) + 0.7152 * lin(g / 255) + 0.0722 * lin(b / 255) + 0.05)
 }
 
-test('CHARACTER_LIGHT_COLOR: each crew member keeps a green of their own on white', () => {
+test('CHARACTER_LIGHT_COLOR: each character keeps a green of their own on white', () => {
   const shades = Object.values(CHARACTER_LIGHT_COLOR)
-  expect(new Set(shades).size).toBe(7)
+  expect(new Set(shades).size).toBe(6)
   for (const [c, hex] of Object.entries(CHARACTER_LIGHT_COLOR)) {
     const [r, g, b] = rgb(hex)
     expect(`${c} ${g > r && g > b}`).toBe(`${c} true`)

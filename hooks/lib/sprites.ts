@@ -1,9 +1,12 @@
-// The crew as chibi pixel people on a 24 × 30 grid, one <rect> per pixel run.
+// The characters as chibi pixel people on a 24 × 30 grid, one <rect> per pixel run.
 // Body pixels sit in `bd` (it bobs or leans while working), the character's prop in
 // `pr` (its own motion), extras in `fx`. Motion is CSS, run by the compositor:
 // only `st-running` animates, and reduced motion stops everything.
 
 import type { Character } from './crew.ts'
+
+// The characters, plus Mouse, who only runs at the end of the progress bar.
+export type Sprite = Character | 'mouse'
 import { PALETTE } from './theme.ts'
 
 // How sprites animate on the desktop: 'css' keyframes (the original crabs' way) or
@@ -13,7 +16,7 @@ export const MOTION: 'css' | 'smil' = 'css'
 export const SPRITE_W = 24
 export const SPRITE_H = 30
 
-export type SpriteState = 'running' | 'done' | 'failed' | 'planned'
+export type SpriteState = 'running' | 'done' | 'failed'
 
 type Fill = (x: number, y: number, w: number, h: number, c: string, group?: 'bd' | 'pr' | 'fx') => void
 
@@ -42,7 +45,7 @@ const person = (f: Fill, skin: string, coat: string, opts: { torsoX?: number; to
   f(11, 12, 2, 1, '#8a4a3a')
 }
 
-const DRAW: Record<Character, (f: Fill) => void> = {
+const DRAW: Record<Sprite, (f: Fill) => void> = {
   // Long split coat, slick hair, small shades; leans back in bullet time with rain streaking behind.
   neo: f => {
     person(f, '#E8B894', '#121212')
@@ -91,23 +94,6 @@ const DRAW: Record<Character, (f: Fill) => void> = {
     f(9, 23, 1, 1, PALETTE.green, 'pr')
     f(13, 23, 1, 1, PALETTE.green, 'pr')
     f(17, 23, 1, 1, PALETTE.green, 'pr')
-  },
-  // Headset over short hair, knit jumper; the operator console scrolls code.
-  tank: f => {
-    person(f, '#8A5A3C', '#7A6A55')
-    f(6, 17, 12, 1, '#665846')
-    f(6, 20, 12, 1, '#665846')
-    f(6, 2, 12, 2, '#1a1a1a')
-    f(6, 1, 12, 1, '#333')
-    f(4, 7, 2, 4, '#333')
-    f(18, 7, 2, 4, '#333')
-    f(5, 11, 4, 1, '#333')
-    f(8, 8, 2, 1, '#2a1a10')
-    f(14, 8, 2, 1, '#2a1a10')
-    f(5, 19, 14, 6, '#1c1c1c')
-    f(6, 20, 12, 4, PALETTE.faint)
-    f(7, 21, 6, 1, PALETTE.green, 'pr')
-    f(7, 23, 9, 1, PALETTE.green2, 'pr')
   },
   // Beanie and an oversized jumper; bounces at double pace.
   mouse: f => {
@@ -166,8 +152,6 @@ export const SPRITE_CSS = `<style>
 @keyframes swap{50%{transform:scaleX(-1)}}
 .ch-trinity.st-running .bd{animation:bob .3s steps(1) infinite}
 .ch-trinity.st-running .pr{animation:blink .15s steps(1) infinite}
-.ch-tank.st-running .pr{animation:scroll .6s steps(2) infinite}
-@keyframes scroll{50%{transform:translateY(-2px)}}
 .ch-mouse.st-running .bd{animation:hop .25s steps(1) infinite}
 @keyframes hop{50%{transform:translateY(-2px)}}
 .ch-oracle.st-running .pr{transform-origin:50% 100%;animation:stir .8s ease-in-out infinite}
@@ -182,7 +166,7 @@ export const SPRITE_CSS = `<style>
 </style>`
 
 // One sprite as a <g>, placed at (x, y) in its parent's units.
-export const spriteSvg = (c: Character, state: SpriteState, at: { x: number; y: number; scale?: number }): string => {
+export const spriteSvg = (c: Sprite, state: SpriteState, at: { x: number; y: number; scale?: number }): string => {
   const groups: Record<'bd' | 'pr' | 'fx', string[]> = { bd: [], pr: [], fx: [] }
   const f: Fill = (x, y, w, h, color, group = 'bd') => {
     groups[group].push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${color}"/>`)
@@ -193,33 +177,30 @@ export const spriteSvg = (c: Character, state: SpriteState, at: { x: number; y: 
     state === 'failed'
       ? `<g class="glitch">${[7, 15, 23].map(y => `<rect x="3" y="${y}" width="18" height="2" fill="${PALETTE.green}" opacity="0.7"/>`).join('')}</g>`
       : ''
-  const dim = state === 'planned' ? ' opacity="0.45"' : ''
-  return `<g transform="translate(${at.x},${at.y}) scale(${at.scale ?? 1})" shape-rendering="crispEdges"${dim}><g class="ch-${c} st-${state}"><g class="fx">${groups.fx.join('')}</g><g class="bd">${groups.bd.join('')}<g class="pr">${groups.pr.join('')}</g></g>${glitch}</g></g>`
+  return `<g transform="translate(${at.x},${at.y}) scale(${at.scale ?? 1})" shape-rendering="crispEdges"><g class="ch-${c} st-${state}"><g class="fx">${groups.fx.join('')}</g><g class="bd">${groups.bd.join('')}<g class="pr">${groups.pr.join('')}</g></g>${glitch}</g></g>`
 }
 
 // Each character's accent: the terminal badge colour and the panel's name colour.
 // All greens, each its own shade; Neo keeps the phosphor green.
-export const CHARACTER_COLOR: Record<Character, string> = {
+export const CHARACTER_COLOR: Record<Sprite, string> = {
   neo: PALETTE.green,
   morpheus: '#2E8B57',
   trinity: '#9AE6B4',
-  tank: '#A8D84E',
   mouse: '#4DD0B0',
   oracle: '#D8E86A',
   smith: '#7A8F7E',
 }
 
 // Each accent's light-mode shade: still a green of its own, readable on white (4.5:1 or more).
-export const CHARACTER_LIGHT_COLOR: Record<Character, string> = {
+export const CHARACTER_LIGHT_COLOR: Record<Sprite, string> = {
   neo: PALETTE.lightGreen,
   morpheus: '#1B5E3B',
   trinity: '#2E7D61',
-  tank: '#4A7A1A',
   mouse: '#00756A',
   oracle: '#6E7A00',
   smith: '#55665A',
 }
 
-const LETTER: Record<Character, string> = { neo: 'N', morpheus: 'M', trinity: 'T', tank: 'K', mouse: 'm', oracle: 'O', smith: 'S' }
+const LETTER: Record<Sprite, string> = { neo: 'N', morpheus: 'M', trinity: 'T', mouse: 'm', oracle: 'O', smith: 'S' }
 
-export const badgeOf = (c: Character): { letter: string; color: string } => ({ letter: LETTER[c], color: CHARACTER_COLOR[c] })
+export const badgeOf = (c: Sprite): { letter: string; color: string } => ({ letter: LETTER[c], color: CHARACTER_COLOR[c] })
