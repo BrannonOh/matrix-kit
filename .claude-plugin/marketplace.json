@@ -1,0 +1,12 @@
+{
+  "name": "matrix-kit",
+  "owner": { "name": "Brannon Oh" },
+  "description": "Brannon Oh's matrix-kit plugin for Claude Code.",
+  "plugins": [
+    {
+      "name": "matrix-kit",
+      "source": ".",
+      "description": "The Matrix for Claude Code: a code-rain progress bar that follows the session's task list, The Construct panel with every subagent played by a Matrix character, and an operator metrics strip."
+    }
+  ]
+}

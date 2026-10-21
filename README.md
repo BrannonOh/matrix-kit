@@ -37,7 +37,13 @@ Every subagent except Explore is asked to report its steps, so its row shows a s
 
 ## Install
 
-To load the plugin for one session:
+To install it from GitHub (Claude Code 2.1.275 or later; the repo is private, so the machine needs git access to it):
+
+```text
+/plugin install matrix-kit --marketplace BrannonOh/matrix-kit
+```
+
+To load the plugin from a local folder for one session:
 
 ```bash
 claude --plugin-dir C:\Users\brann\matrix-kit
