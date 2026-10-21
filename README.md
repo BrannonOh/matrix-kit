@@ -37,7 +37,7 @@ Every subagent except Explore is asked to report its steps, so its row shows a s
 
 ## Install
 
-To install it from GitHub (Claude Code 2.1.275 or later; the repo is private, so the machine needs git access to it):
+To install it from GitHub (Claude Code 2.1.275 or later):
 
 ```text
 /plugin install matrix-kit --marketplace BrannonOh/matrix-kit
